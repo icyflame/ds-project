@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 )
 
 type Peer struct {
@@ -53,10 +54,20 @@ func Main() {
 	log.Printf("Loading configuration from %s", config_file_path)
 	log.Print("Configuration: ", config)
 
+	MutexVars := map[string]sync.Mutex{}
+
 	r := mux.NewRouter()
 
 	for _, route := range routes {
-		r.HandleFunc(route.Pattern, route.Handler)
+		MutexVars[route.Name] = sync.Mutex{}
+	}
+
+	for _, route := range routes {
+		r.
+			Methods(route.Method).
+			Path(route.Pattern).
+			Name(route.Name).
+			Handler(LogAndMutex(route.Handler, route.Name, MutexVars[route.Name]))
 	}
 
 	log.Printf("Listening on port 8080")
