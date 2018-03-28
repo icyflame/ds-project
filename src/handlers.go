@@ -1,33 +1,50 @@
 package project
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"time"
 )
-
-func Handler1(w http.ResponseWriter, r *http.Request) {
-	time.Sleep(5 * time.Second)
-	fmt.Fprint(w, "handling 1")
-}
-
-func Handler2(w http.ResponseWriter, r *http.Request) {
-	time.Sleep(7 * time.Second)
-	fmt.Fprint(w, "handling 2")
-}
 
 func AcceptClientMessage(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	data := r.PostFormValue("data")
 
-	log.Print("Sending msg from client for acceptance: ", data)
+	log.Print("Broadcasting msg from client: ", data)
 
-	stamped, msg_ack := AcceptMessage(BuildMsgClient(Data(data)))
+	AcceptMessage(BuildMsgClient(Data(data)))
 
-	if stamped {
-		fmt.Fprintf(w, "Message accepted, final timestamp: %d", msg_ack.FinalTS)
-	} else {
-		fmt.Fprint(w, "Message accepted and forwarded to token site")
+	log.Print("Message accepted. Broadcasted to everyone, waiting for token site's ack")
+
+	fmt.Fprint(w, "Message accepted. Broadcasted to everyone, waiting for token site's ack")
+}
+
+func AcceptMsgRequestHandler(w http.ResponseWriter, r *http.Request) {
+	msg_req_vals := r.PostFormValue("data")
+	msg_req := MsgRequest{}
+	err := json.Unmarshal([]byte(msg_req_vals), &msg_req)
+
+	if err != nil {
+		fmt.Fprint(w, "ERROR: ", err)
 	}
+
+	AcceptMsgRequest(msg_req)
+
+	log.Println("Message request received")
+	if AmTokenSite() {
+		log.Println("I will timestamp this message and broadcast ACKs to everyone")
+	}
+}
+
+func AcceptMsgAckHandler(w http.ResponseWriter, r *http.Request) {
+	msg_ack_vals := r.PostFormValue("data")
+	msg_ack := MsgAck{}
+	err := json.Unmarshal([]byte(msg_ack_vals), &msg_ack)
+
+	if err != nil {
+		fmt.Fprint(w, "ERROR: ", err)
+	}
+
+	log.Println("Message ack recd: ", msg_ack)
 }

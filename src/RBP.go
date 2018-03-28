@@ -1,6 +1,9 @@
 package project
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/url"
 	"sync"
 )
 
@@ -36,7 +39,7 @@ func AmTokenSite() bool {
 // peers. If not, it will stamp the message with it's sender_seq and send it to
 // everyone else.
 // Returns true with the MsgAck or false with nil
-func AcceptMessage(min_msg MsgClient) (bool, MsgAck) {
+func AcceptMessage(min_msg MsgClient) {
 	msg_req := BuildMsgRequest(
 		my_node_num,
 		stamps[my_node_num],
@@ -44,26 +47,48 @@ func AcceptMessage(min_msg MsgClient) (bool, MsgAck) {
 		min_msg.Content,
 	)
 
+	BroadcastMsg(msg_req, MSG_REQ_PATH)
+}
+
+func AcceptMsgRequest(msg_req MsgRequest) {
 	if AmTokenSite() {
-		// No need to send this message anywhere. Timestamp it and broadcast to
-		// everyone else
+		// Timestamp this message and broadcast ack to everyone else
 		msg_ack := StampMsg(msg_req)
-		return true, msg_ack
+		BroadcastMsg(msg_ack, MSG_ACK_PATH)
 	} else {
-		// Need to send this message to the IP stored inside Peers
-		SendMsgReqToTokSite(msg_req, token_site)
-		return false, MsgAck{}
+		// No need to do anything, just add it to the queue and wait for the ack
+		// to arrive so you can sequence it
+	}
+}
+
+func BroadcastMsg(
+	msg interface{},
+	path string,
+) {
+	for i := 0; i < len(peers); i++ {
+		go SendMsgToNode(msg, path, int64(i))
 	}
 }
 
 // Communication function: sends this msg request to the appropriate IP for
 // timestamping
-func SendMsgReqToTokSite(
-	msg_req MsgRequest,
+func SendMsgToNode(
+	msg interface{},
+	path string,
 	token_site int64,
-) {
-	// dest_ip := peers[token_site].IP
+) error {
+	dest_ip := peers[token_site].IP
 	// Post the data to the token site
+	dat, _ := json.Marshal(msg)
+	dat_vals := url.Values{}
+	dat_vals.Add("data", string(dat))
+
+	_, err := http.PostForm(
+		dest_ip+path,
+		dat_vals,
+	)
+
+	return err
 }
 
 // Function that provides the token site functionality

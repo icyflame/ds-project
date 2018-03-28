@@ -15,23 +15,23 @@ type Routes []Route
 
 var routes = Routes{
 	Route{
-		"/",
-		Handler1,
-		"root",
-		"GET",
-		true,
-	},
-	Route{
-		"/test",
-		Handler2,
-		"test",
-		"GET",
-		false,
-	},
-	Route{
 		"/submit-message",
 		AcceptClientMessage,
 		"AcceptClientMsg",
+		"POST",
+		false,
+	},
+	Route{
+		MSG_REQ_PATH,
+		AcceptMsgRequestHandler,
+		"AcceptMsgRequest",
+		"POST",
+		false,
+	},
+	Route{
+		MSG_ACK_PATH,
+		AcceptMsgAckHandler,
+		"AcceptMsgAck",
 		"POST",
 		false,
 	},
