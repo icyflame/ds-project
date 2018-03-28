@@ -50,9 +50,13 @@ func Main() {
 		log.Fatal("Couldn't parse config file: ", err)
 	}
 
-	log.Printf("NODE %d STARTED", my_node_num)
+	if my_node_num >= int64(len(config.Peers)) {
+		log.Fatal("Node number must be between 0 and number of peers at the beginning of operation")
+	}
+
+	log.Printf("Node %d/%d started", my_node_num, len(config.Peers))
 	log.Printf("Loading configuration from %s", config_file_path)
-	log.Print("Configuration: ", config)
+	log.Print("Configuration: ", len(config.Peers))
 
 	MutexVars := map[string]sync.Mutex{}
 
@@ -67,9 +71,9 @@ func Main() {
 			Methods(route.Method).
 			Path(route.Pattern).
 			Name(route.Name).
-			Handler(LogAndMutex(route.Handler, route.Name, MutexVars[route.Name]))
+			Handler(LogAndMutex(route.Handler, route.Name, MutexVars[route.Name], route.SingleHandler))
 	}
 
-	log.Printf("Listening on port 8080")
+	log.Printf("Listening on port %s", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), r))
 }
