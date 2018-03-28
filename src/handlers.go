@@ -33,7 +33,9 @@ func AcceptMsgRequestHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Println("Message request received")
 	if AmTokenSite() {
-		log.Println("I will timestamp this message and broadcast ACKs to everyone")
+		log.Println("I have timestamped this message and broadcasted ACKs to everyone")
+		// Indicate ACK to the requester
+		fmt.Fprint(w, "")
 	}
 }
 
@@ -46,5 +48,7 @@ func AcceptMsgAckHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "ERROR: ", err)
 	}
 
-	log.Println("Message ack recd: ", msg_ack)
+	log.Printf("Message ack recd: %#v", msg_ack)
+
+	SequenceMsg(msg_ack)
 }

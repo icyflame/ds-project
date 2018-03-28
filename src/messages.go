@@ -86,3 +86,57 @@ func BuildRetransmitReq(
 		final_ts,
 	}
 }
+
+type MsgWithFinalTS struct {
+	Sender    int64
+	SenderSeq int64
+	TokSite   int64
+	Tlv       int64
+	FinalTS   int64
+	Content   Data
+}
+
+func BuildMsgWithFinalTS(
+	msg_req MsgRequest,
+	msg_ack MsgAck,
+) MsgWithFinalTS {
+	return MsgWithFinalTS{
+		msg_req.Sender,
+		msg_req.SenderSeq,
+		msg_ack.TokSite,
+		msg_req.Tlv,
+		msg_ack.FinalTS,
+		msg_req.Content,
+	}
+}
+
+type MsgPriorityQueue []*MsgWithFinalTS
+
+func (a MsgPriorityQueue) Len() int {
+	return len(a)
+}
+
+func (a MsgPriorityQueue) Less(i, j int) bool {
+	return a[i].FinalTS < a[j].FinalTS
+}
+
+func (a MsgPriorityQueue) Swap(i, j int) {
+	t := a[i]
+	a[i] = a[j]
+	a[j] = t
+}
+
+func (a *MsgPriorityQueue) Push(x interface{}) {
+	*a = append(*a, x.(*MsgWithFinalTS))
+}
+
+func (a *MsgPriorityQueue) Pop() interface{} {
+	old := *a
+	n := len(old)
+
+	popped := old[n-1]
+
+	*a = old[:n-1]
+
+	return popped
+}
