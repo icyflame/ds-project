@@ -56,7 +56,12 @@ func Main() {
 
 	log.Printf("Node %d/%d started", my_node_num, len(config.Peers))
 	log.Printf("Loading configuration from %s", config_file_path)
-	log.Print("Configuration: ", len(config.Peers))
+
+	InitFromConfig(config, my_node_num)
+
+	if AmTokenSite() {
+		log.Print("I am the current token site")
+	}
 
 	MutexVars := map[string]sync.Mutex{}
 

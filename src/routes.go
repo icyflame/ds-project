@@ -28,4 +28,11 @@ var routes = Routes{
 		"GET",
 		false,
 	},
+	Route{
+		"/submit-message",
+		AcceptClientMessage,
+		"AcceptClientMsg",
+		"POST",
+		false,
+	},
 }
