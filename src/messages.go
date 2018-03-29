@@ -69,31 +69,14 @@ func BuildMsgAck(
 	}
 }
 
-// Retransmit request that is unicast from the receiver who has missed a message
-// to the current token site
-type RetransmitReq struct {
-	Tlv         int64
-	FinalTSReqd int64
-}
-
-// Function to build the retransmit request message
-func BuildRetransmitReq(
-	tlv int64,
-	final_ts int64,
-) RetransmitReq {
-	return RetransmitReq{
-		tlv,
-		final_ts,
-	}
-}
-
 type MsgWithFinalTS struct {
-	Sender    int64
-	SenderSeq int64
-	TokSite   int64
-	Tlv       int64
-	FinalTS   int64
-	Content   Data
+	Sender      int64
+	SenderSeq   int64
+	TokSite     int64
+	Tlv         int64
+	FinalTS     int64
+	NextTokSite int64
+	Content     Data
 }
 
 func BuildMsgWithFinalTS(
@@ -106,8 +89,22 @@ func BuildMsgWithFinalTS(
 		msg_ack.TokSite,
 		msg_req.Tlv,
 		msg_ack.FinalTS,
+		msg_ack.NextTokSite,
 		msg_req.Content,
 	}
+}
+
+func GetMsgAckFromMWFTS(
+	m_wfts MsgWithFinalTS,
+) MsgAck {
+	return BuildMsgAck(
+		m_wfts.Sender,
+		m_wfts.SenderSeq,
+		m_wfts.TokSite,
+		m_wfts.FinalTS,
+		m_wfts.Tlv,
+		m_wfts.NextTokSite,
+	)
 }
 
 type MsgPriorityQueue []*MsgWithFinalTS
@@ -144,14 +141,17 @@ func (a *MsgPriorityQueue) Pop() interface{} {
 type MsgRetransmitReq struct {
 	Sender  int64
 	FinalTS int64
+	Tlv     int64
 }
 
 func BuildMsgRetransmitReq(
 	sender int64,
 	final_ts int64,
+	tlv int64,
 ) MsgRetransmitReq {
 	return MsgRetransmitReq{
 		sender,
 		final_ts,
+		tlv,
 	}
 }

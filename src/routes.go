@@ -45,13 +45,6 @@ var routes = Routes{
 		"POST",
 		false,
 	},
-	Route{
-		MSG_RETRANSMITTED_REQ_PATH,
-		ReceiveRetransmittedMsg,
-		"RecvRetransmittedMsg",
-		"POST",
-		false,
-	},
 
 	// MAINTENANCE
 	Route{

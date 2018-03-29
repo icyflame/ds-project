@@ -99,21 +99,3 @@ func RetransmissionReqHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "")
 	RetransmitMsg(msg_rtr)
 }
-
-func ReceiveRetransmittedMsg(w http.ResponseWriter, r *http.Request) {
-	msg_wfts_vals := r.PostFormValue("data")
-	msg_wfts := MsgWithFinalTS{}
-	err := json.Unmarshal([]byte(msg_wfts_vals), &msg_wfts)
-
-	if err != nil {
-		log.Fatal("Couldn't parse retranmission request: ", err)
-	}
-
-	log.Printf("RECD RTMSG %d, %d, TS %d",
-		msg_wfts.Sender, msg_wfts.SenderSeq,
-		msg_wfts.FinalTS)
-
-	fmt.Fprint(w, "")
-
-	AddStampedMsgToQc(msg_wfts)
-}
