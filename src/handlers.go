@@ -11,13 +11,13 @@ func AcceptClientMessage(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	data := r.PostFormValue("data")
 
-	log.Print("Broadcasting msg from client: ", data)
+	log.Print("CLIENT BROADCAST ", data)
 
-	AcceptMessage(BuildMsgClient(Data(data)))
+	m := AcceptMessage(BuildMsgClient(Data(data)))
 
-	log.Print("Message accepted. Broadcasted to everyone, waiting for token site's ack")
+	log.Printf("BROADCAST %d, %d", m.Sender, m.SenderSeq)
 
-	fmt.Fprint(w, "Message accepted. Broadcasted to everyone, waiting for token site's ack")
+	fmt.Fprint(w, "Message accepted. Broadcasted to everyone, waiting for token site's ack.\n")
 }
 
 func AcceptMsgRequestHandler(w http.ResponseWriter, r *http.Request) {
@@ -31,9 +31,11 @@ func AcceptMsgRequestHandler(w http.ResponseWriter, r *http.Request) {
 
 	AcceptMsgRequest(msg_req)
 
-	log.Println("Message request received")
+	log.Printf("REQ MSG %d, %d", msg_req.Sender, msg_req.SenderSeq)
+
 	if AmTokenSite() {
-		log.Println("I have timestamped this message and broadcasted ACKs to everyone")
+		log.Println("STAMPED and BROADCASTED")
+
 		// Indicate ACK to the requester
 		fmt.Fprint(w, "")
 	}
@@ -48,7 +50,31 @@ func AcceptMsgAckHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "ERROR: ", err)
 	}
 
-	log.Printf("Message ack recd: %#v", msg_ack)
+	log.Printf("ACK MSG %d, %d", msg_ack.Sender, msg_ack.SenderSeq)
 
 	SequenceMsg(msg_ack)
+}
+
+func HealthReqHandler(w http.ResponseWriter, r *http.Request) {
+	t := GetHealthInfo()
+
+	fmt.Fprintf(w, "Node: %d\nToken site: %d\nNTS: %d\nTLV: %d\n",
+		t.MyNum,
+		t.TokSite,
+		t.Nts,
+		t.Tlv,
+	)
+
+	fmt.Fprint(w, "\n\nQB:\n")
+	for k, v := range t.Qb {
+		fmt.Fprintf(w, "\n\tSender: %d", k)
+		for _, msg := range v {
+			fmt.Fprintf(w, "\n\t\t%#v", msg)
+		}
+	}
+
+	fmt.Fprintf(w, "\n\nQC: %d msgs\n", len(t.Qc))
+	for _, msg := range t.Qc {
+		fmt.Fprintf(w, "\n\t%#v", msg)
+	}
 }

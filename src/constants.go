@@ -1,4 +1,4 @@
 package project
 
-const MSG_REQ_PATH = "/msg-request"
-const MSG_ACK_PATH = "/msg-ack"
+const MSG_REQ_PATH = "/mreq"
+const MSG_ACK_PATH = "/mack"

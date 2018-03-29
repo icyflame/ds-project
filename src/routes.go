@@ -14,13 +14,16 @@ type Route struct {
 type Routes []Route
 
 var routes = Routes{
+	// CLIENT-SIDE
 	Route{
-		"/submit-message",
+		"/sm",
 		AcceptClientMessage,
 		"AcceptClientMsg",
 		"POST",
 		false,
 	},
+
+	// PROTOCOL-SIDE
 	Route{
 		MSG_REQ_PATH,
 		AcceptMsgRequestHandler,
@@ -33,6 +36,15 @@ var routes = Routes{
 		AcceptMsgAckHandler,
 		"AcceptMsgAck",
 		"POST",
+		false,
+	},
+
+	// MAINTENANCE
+	Route{
+		"/health",
+		HealthReqHandler,
+		"HealthReq",
+		"GET",
 		false,
 	},
 }

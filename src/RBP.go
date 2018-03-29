@@ -45,7 +45,7 @@ func AmTokenSite() bool {
 // peers. If not, it will stamp the message with it's sender_seq and send it to
 // everyone else.
 // Returns true with the MsgAck or false with nil
-func AcceptMessage(min_msg MsgClient) {
+func AcceptMessage(min_msg MsgClient) MsgRequest {
 	msg_req := BuildMsgRequest(
 		my_node_num,
 		stamps[my_node_num],
@@ -53,31 +53,40 @@ func AcceptMessage(min_msg MsgClient) {
 		min_msg.Content,
 	)
 
+	// Send to everyone else
 	resps := BroadcastMsg(msg_req, MSG_REQ_PATH)
 
-	log.Println("Msg broadcasted on separate go routines")
+	// Accept the message yourself
+	AcceptMsgRequest(msg_req)
+
+	log.Printf("BROADCAST MSG %d, %d", msg_req.Sender, msg_req.SenderSeq)
 
 	for i := 0; i < len(peers); i++ {
 		v := <-resps
 		if v == 200 {
 			stamps[my_node_num] += 1
-			log.Printf("ACK from token site by %d", i, my_node_num)
+			log.Printf("ACK TOKEN SITE %d %d", msg_req.Sender, msg_req.SenderSeq)
 			break
 		}
 	}
+
+	return msg_req
+}
+
+func AddToMyQb(msg_req MsgRequest) {
+	Queue_b[msg_req.Sender] = append(Queue_b[msg_req.Sender], msg_req)
 }
 
 func AcceptMsgRequest(msg_req MsgRequest) {
+	AddToMyQb(msg_req)
+
 	if AmTokenSite() {
 		// Timestamp this message and broadcast ack to everyone else
 		msg_ack := StampMsg(msg_req)
 		BroadcastMsg(msg_ack, MSG_ACK_PATH)
 
 		// Add msg_req to the priority queue
-	} else {
-		// No need to do anything, just add it to the queue and wait for the ack
-		// to arrive so you can sequence it
-		Queue_b[msg_req.Sender] = append(Queue_b[msg_req.Sender], msg_req)
+		SequenceMsg(msg_ack)
 	}
 }
 
@@ -89,6 +98,9 @@ func BroadcastMsg(
 ) chan int {
 	resps := make(chan int)
 	for i := 0; i < len(peers); i++ {
+		if int64(i) == my_node_num {
+			continue
+		}
 		go func(j int) {
 			resps <- SendMsgToNode(msg, path, int64(j))
 		}(i)
@@ -102,9 +114,9 @@ func BroadcastMsg(
 func SendMsgToNode(
 	msg interface{},
 	path string,
-	token_site int64,
+	site_num int64,
 ) int {
-	dest_ip := peers[token_site].IP
+	dest_ip := peers[site_num].IP
 	// Post the data to the token site
 	dat, _ := json.Marshal(msg)
 	dat_vals := url.Values{}
@@ -127,6 +139,8 @@ func SendMsgToNode(
 }
 
 // Function that provides the token site functionality
+// Stamps the given msg request and returns the MsgAck that should be broadcast
+// to all the nodes
 func StampMsg(msg_req MsgRequest) MsgAck {
 	// stamp this message and move on
 
@@ -148,15 +162,42 @@ func StampMsg(msg_req MsgRequest) MsgAck {
 	return msg_ack
 }
 
+// Use the given MsgAck to remove the message from Qb and add it in it's
+// appropriate place in Qb
 func SequenceMsg(msg_ack MsgAck) {
-	for _, msg_req := range Queue_b[msg_ack.Sender] {
+	for index, msg_req := range Queue_b[msg_ack.Sender] {
 		if msg_ack.SenderSeq == msg_req.SenderSeq {
 			m := BuildMsgWithFinalTS(msg_req, msg_ack)
 			heap.Push(&Queue_c, &m)
-			log.Printf("QC: %#v; New msg: %#v", Queue_c, m)
+
+			Queue_b[msg_ack.Sender] = append(Queue_b[msg_ack.Sender][:index], Queue_b[msg_ack.Sender][index+1:]...)
+
+			log.Printf("QC: %d; New msg: %d, %d", len(Queue_c), m.Sender, m.SenderSeq)
+
 			return
 		}
 	}
 
 	// Msg not found! Need to send a retransmission request
+	log.Printf("MSG NOT FOUND %d, %d", msg_ack.Sender, msg_ack.SenderSeq)
+}
+
+type Health struct {
+	MyNum   int64
+	Nts     int64
+	Tlv     int64
+	TokSite int64
+	Qb      map[int64][]MsgRequest
+	Qc      MsgPriorityQueue
+}
+
+func GetHealthInfo() Health {
+	return Health{
+		my_node_num,
+		nts,
+		tlv,
+		token_site,
+		Queue_b,
+		Queue_c,
+	}
 }

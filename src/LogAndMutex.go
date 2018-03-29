@@ -22,10 +22,9 @@ func LogAndMutex(inner http.Handler, name string, lock sync.Mutex, to_lock bool)
 		inner.ServeHTTP(w, r)
 
 		log.Printf(
-			"%s\t%s\t%s\t%s",
-			r.Method,
+			"%c\t%s\t%s",
+			r.Method[0],
 			r.RequestURI,
-			name,
 			time.Since(start),
 		)
 
