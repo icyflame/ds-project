@@ -16,7 +16,7 @@ var next_token_site int64
 var my_node_num int64
 var stamps = []int64{}
 var peers = map[int64]Peer{}
-var timestamping sync.Mutex
+var timestamping, Qc_updating sync.Mutex
 var Queue_b = map[int64][]MsgRequest{}
 var Queue_c = MsgPriorityQueue{}
 
@@ -144,8 +144,6 @@ func SendMsgToNode(
 func StampMsg(msg_req MsgRequest) MsgAck {
 	// stamp this message and move on
 
-	timestamping.Lock()
-
 	msg_ack := BuildMsgAck(
 		msg_req.Sender,
 		msg_req.SenderSeq,
@@ -155,31 +153,55 @@ func StampMsg(msg_req MsgRequest) MsgAck {
 		next_token_site,
 	)
 
-	nts += 1
-
-	timestamping.Unlock()
-
 	return msg_ack
+}
+
+func AddStampedMsgToQc(m MsgWithFinalTS) {
+	Qc_updating.Lock()
+
+	heap.Push(&Queue_c, &m)
+
+	Qc_updating.Unlock()
+
+	log.Printf("QC: %d; New msg: %d, %d", len(Queue_c), m.Sender, m.SenderSeq)
 }
 
 // Use the given MsgAck to remove the message from Qb and add it in it's
 // appropriate place in Qb
 func SequenceMsg(msg_ack MsgAck) {
-	for index, msg_req := range Queue_b[msg_ack.Sender] {
+	if msg_ack.FinalTS < nts {
+		// This msg_ack has been received for the second time
+		// Ignore
+		return
+	}
+
+	if msg_ack.FinalTS > nts {
+		// Can't accept this message until I have all the previous messages
+		// Send retransmission request to the token site for the missed messages
+		SendRetransmitReq(nts)
+		return
+	}
+
+	sender := msg_ack.Sender
+	for index, msg_req := range Queue_b[sender] {
 		if msg_ack.SenderSeq == msg_req.SenderSeq {
 			m := BuildMsgWithFinalTS(msg_req, msg_ack)
-			heap.Push(&Queue_c, &m)
 
-			Queue_b[msg_ack.Sender] = append(Queue_b[msg_ack.Sender][:index], Queue_b[msg_ack.Sender][index+1:]...)
+			AddStampedMsgToQc(m)
+			Queue_b[sender] = append(Queue_b[sender][:index], Queue_b[sender][index+1:]...)
 
-			log.Printf("QC: %d; New msg: %d, %d", len(Queue_c), m.Sender, m.SenderSeq)
+			timestamping.Lock()
+
+			nts += 1
+
+			timestamping.Unlock()
 
 			return
 		}
 	}
 
 	// Msg not found! Need to send a retransmission request
-	log.Printf("MSG NOT FOUND %d, %d", msg_ack.Sender, msg_ack.SenderSeq)
+	log.Printf("MSG NOT FOUND %d, %d", sender, msg_ack.SenderSeq)
 }
 
 type Health struct {
@@ -200,4 +222,32 @@ func GetHealthInfo() Health {
 		Queue_b,
 		Queue_c,
 	}
+}
+
+func MyNodeNum() int64 {
+	return my_node_num
+}
+
+func SendRetransmitReq(final_ts int64) {
+	m_rtr := BuildMsgRetransmitReq(my_node_num, final_ts)
+	resp := SendMsgToNode(m_rtr, MSG_RETRANSMIT_REQ_PATH, token_site)
+	if resp != 200 {
+		log.Printf("FAIL RTR %d -> %d for %d", my_node_num,
+			token_site, final_ts)
+	} else {
+		log.Printf("SEND RTR %d -> %d for %d", my_node_num,
+			token_site, final_ts)
+	}
+}
+
+func RetransmitMsg(m_rtr MsgRetransmitReq) {
+	for _, msg := range Queue_c {
+		if msg.FinalTS == m_rtr.FinalTS {
+			SendMsgToNode(msg, MSG_RETRANSMITTED_REQ_PATH, m_rtr.Sender)
+			return
+		}
+	}
+
+	// Msg not found in Queue (?! SHOULD NOT HAPPEN)
+	log.Printf("MSG NOT FOUND TS %d", m_rtr.FinalTS)
 }

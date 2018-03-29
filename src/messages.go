@@ -140,3 +140,18 @@ func (a *MsgPriorityQueue) Pop() interface{} {
 
 	return popped
 }
+
+type MsgRetransmitReq struct {
+	Sender  int64
+	FinalTS int64
+}
+
+func BuildMsgRetransmitReq(
+	sender int64,
+	final_ts int64,
+) MsgRetransmitReq {
+	return MsgRetransmitReq{
+		sender,
+		final_ts,
+	}
+}

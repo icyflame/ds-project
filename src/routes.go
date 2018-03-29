@@ -38,6 +38,20 @@ var routes = Routes{
 		"POST",
 		false,
 	},
+	Route{
+		MSG_RETRANSMIT_REQ_PATH,
+		RetransmissionReqHandler,
+		"RetransmissionReq",
+		"POST",
+		false,
+	},
+	Route{
+		MSG_RETRANSMITTED_REQ_PATH,
+		ReceiveRetransmittedMsg,
+		"RecvRetransmittedMsg",
+		"POST",
+		false,
+	},
 
 	// MAINTENANCE
 	Route{
