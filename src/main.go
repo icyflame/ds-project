@@ -54,13 +54,13 @@ func Main() {
 		log.Fatal("Node number must be between 0 and number of peers at the beginning of operation")
 	}
 
-	log.Printf("Node %d/%d started", my_node_num, len(config.Peers))
-	log.Printf("Loading configuration from %s", config_file_path)
+	log.Printf("Node %d/%d", my_node_num, len(config.Peers))
+	log.Printf("Configuration: %s", config_file_path)
 
 	InitFromConfig(config, my_node_num)
 
 	if AmTokenSite() {
-		log.Print("I am the current token site")
+		log.Print("I am the TokSite")
 	}
 
 	MutexVars := map[string]sync.Mutex{}
@@ -79,6 +79,6 @@ func Main() {
 			Handler(LogAndMutex(route.Handler, route.Name, MutexVars[route.Name], route.SingleHandler))
 	}
 
-	log.Printf("Listening on port %s", port)
+	log.Printf("Listen %s", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), r))
 }

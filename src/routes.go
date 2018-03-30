@@ -27,22 +27,31 @@ var routes = Routes{
 	Route{
 		MSG_REQ_PATH,
 		AcceptMsgRequestHandler,
-		"AcceptMsgRequest",
+		"mreq",
 		"POST",
 		false,
 	},
 	Route{
 		MSG_ACK_PATH,
 		AcceptMsgAckHandler,
-		"AcceptMsgAck",
+		"mack",
 		"POST",
 		false,
 	},
 	Route{
 		MSG_RETRANSMIT_REQ_PATH,
 		RetransmissionReqHandler,
-		"RetransmissionReq",
+		"rtreq",
 		"POST",
+		false,
+	},
+
+	// DEBUGGING
+	Route{
+		MSG_DROP_PATH,
+		DropMsgsHandler,
+		"dropreq",
+		"GET",
 		false,
 	},
 
@@ -50,7 +59,7 @@ var routes = Routes{
 	Route{
 		"/health",
 		HealthReqHandler,
-		"HealthReq",
+		"health",
 		"GET",
 		false,
 	},

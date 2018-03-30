@@ -33,6 +33,8 @@ func InitFromConfig(config Config, my_num int64) {
 		Queue_b[int64(i)] = []MsgRequest{}
 	}
 	heap.Init(&Queue_c)
+
+	InitDropReqs(&DropReqs)
 }
 
 // Getter function for token_site variable
@@ -59,13 +61,13 @@ func AcceptMessage(min_msg MsgClient) MsgRequest {
 	// Accept the message yourself
 	AcceptMsgRequest(msg_req)
 
-	log.Printf("BROADCAST MSG %d, %d", msg_req.Sender, msg_req.SenderSeq)
+	log.Printf("SEND ALL %d, %d", msg_req.Sender, msg_req.SenderSeq)
 
 	for i := 0; i < len(peers); i++ {
 		v := <-resps
 		if v == 200 {
 			stamps[my_node_num] += 1
-			log.Printf("ACK TOKEN SITE %d %d", msg_req.Sender, msg_req.SenderSeq)
+			log.Printf("RECV REQ ACK %d, %d", msg_req.Sender, msg_req.SenderSeq)
 			break
 		}
 	}
@@ -239,7 +241,7 @@ func SequenceMsg(msg_ack MsgAck) {
 	}
 
 	// Msg not found! Need to send a retransmission request
-	log.Printf("MSG NOT FOUND %d, %d, TS %d", sender, msg_ack.SenderSeq, msg_ack.FinalTS)
+	log.Printf("FAIL NOT FOUND %d, %d, TS %d", sender, msg_ack.SenderSeq, msg_ack.FinalTS)
 	SendRetransmitReq(msg_ack.FinalTS)
 }
 
@@ -289,5 +291,5 @@ func RetransmitMsg(m_rtr MsgRetransmitReq) {
 	}
 
 	// Msg not found in Queue (?! SHOULD NOT HAPPEN)
-	log.Printf("MSG NOT FOUND TS %d", m_rtr.FinalTS)
+	log.Printf("PANIC NOT FOUND TS %d", m_rtr.FinalTS)
 }

@@ -3,6 +3,7 @@ package project
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/gorilla/mux"
 	"log"
 	"net/http"
 )
@@ -11,11 +12,11 @@ func AcceptClientMessage(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	data := r.PostFormValue("data")
 
-	log.Print("CLIENT BROADCAST ", data)
+	log.Print("RECV CLIENT ", data)
 
 	m := AcceptMessage(BuildMsgClient(Data(data)))
 
-	log.Printf("BROADCAST %d, %d", m.Sender, m.SenderSeq)
+	log.Printf("SEND ALL %d, %d", m.Sender, m.SenderSeq)
 
 	fmt.Fprint(w, "Message accepted. Broadcasted to everyone, waiting for token site's ack.\n")
 }
@@ -29,7 +30,7 @@ func AcceptMsgRequestHandler(w http.ResponseWriter, r *http.Request) {
 		log.Fatal("Couldn't parse msg request: ", err)
 	}
 
-	log.Printf("REQ MSG %d, %d", msg_req.Sender, msg_req.SenderSeq)
+	log.Printf("RECV REQ %d, %d", msg_req.Sender, msg_req.SenderSeq)
 
 	AcceptMsgRequest(msg_req)
 
@@ -50,7 +51,7 @@ func AcceptMsgAckHandler(w http.ResponseWriter, r *http.Request) {
 		log.Fatal("Couldn't parse Msg ack: ", err)
 	}
 
-	log.Printf("ACK MSG %d, %d", msg_ack.Sender, msg_ack.SenderSeq)
+	log.Printf("RECV ACK %d, %d, TS %d", msg_ack.Sender, msg_ack.SenderSeq, msg_ack.FinalTS)
 
 	SequenceMsg(msg_ack)
 }
@@ -77,6 +78,11 @@ func HealthReqHandler(w http.ResponseWriter, r *http.Request) {
 	for _, msg := range t.Qc {
 		fmt.Fprintf(w, "\n\t%#v", msg)
 	}
+
+	fmt.Fprint(w, "\n\nDROP REQUESTS: \n")
+	for k, v := range GetDropReqs() {
+		fmt.Fprintf(w, "\n\t%s\t=%d", k, v)
+	}
 }
 
 func RetransmissionReqHandler(w http.ResponseWriter, r *http.Request) {
@@ -93,9 +99,17 @@ func RetransmissionReqHandler(w http.ResponseWriter, r *http.Request) {
 		log.Fatal("Couldn't parse retranmission request: ", err)
 	}
 
-	log.Printf("RECD RTR %d -> %d for %d", msg_rtr.Sender,
+	log.Printf("RECV RTR %d -> %d for %d", msg_rtr.Sender,
 		MyNodeNum(), msg_rtr.FinalTS)
 
 	fmt.Fprint(w, "")
 	RetransmitMsg(msg_rtr)
+}
+
+func DropMsgsHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	count := 0
+	fmt.Sscanf(vars["count"], "%d", &count)
+
+	DropMsgs(vars["name"], count)
 }
