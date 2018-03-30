@@ -153,17 +153,23 @@ type MsgRetransmitReq struct {
 	Sender  int64
 	FinalTS int64
 	Tlv     int64
+	HaveReq bool
+	HaveAck bool
 }
 
 func BuildMsgRetransmitReq(
 	sender int64,
 	final_ts int64,
 	tlv int64,
+	have_req bool,
+	have_ack bool,
 ) MsgRetransmitReq {
 	return MsgRetransmitReq{
 		sender,
 		final_ts,
 		tlv,
+		have_req,
+		have_ack,
 	}
 }
 

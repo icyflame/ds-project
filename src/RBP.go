@@ -244,7 +244,7 @@ func SequenceMsg(msg_ack MsgAck) {
 	if msg_ack.FinalTS > nts {
 		// Can't accept this message until I have all the previous messages
 		// Send retransmission request to the token site for the missed messages
-		SendRetransmitReq(nts)
+		SendRetransmitReq(nts, false, false)
 		return
 	}
 
@@ -273,7 +273,7 @@ func SequenceMsg(msg_ack MsgAck) {
 
 		// Msg not found! Need to send a retransmission request
 		log.Printf("FAIL NOT FOUND %d, %d, TS %d", sender, msg_ack.SenderSeq, msg_ack.FinalTS)
-		SendRetransmitReq(msg_ack.FinalTS)
+		SendRetransmitReq(msg_ack.FinalTS, false, true)
 	}
 }
 
@@ -301,8 +301,8 @@ func MyNodeNum() int64 {
 	return my_node_num
 }
 
-func SendRetransmitReq(final_ts int64) {
-	m_rtr := BuildMsgRetransmitReq(my_node_num, final_ts, tlv)
+func SendRetransmitReq(final_ts int64, have_req, have_ack bool) {
+	m_rtr := BuildMsgRetransmitReq(my_node_num, final_ts, tlv, have_req, have_ack)
 	resp := SendMsgToNode(m_rtr, MSG_RETRANSMIT_REQ_PATH, token_site)
 	if resp != 200 {
 		log.Printf("FAIL RTR %d -> %d for %d", my_node_num,
@@ -316,8 +316,16 @@ func SendRetransmitReq(final_ts int64) {
 func RetransmitMsg(m_rtr MsgRetransmitReq) {
 	for _, msg := range Queue_c {
 		if msg.FinalTS == m_rtr.FinalTS {
-			m_req := GetMsgReqFromMWFTS(*msg)
-			SendMsgToNode(m_req, MSG_REQ_PATH, m_rtr.Sender)
+			if !m_rtr.HaveReq {
+				m_req := GetMsgReqFromMWFTS(*msg)
+				SendMsgToNode(m_req, MSG_REQ_PATH, m_rtr.Sender)
+			}
+
+			if !m_rtr.HaveAck {
+				m_ack := GetMsgAckFromMWFTS(*msg)
+				SendMsgToNode(m_ack, MSG_ACK_PATH, m_rtr.Sender)
+			}
+
 			return
 		}
 	}
