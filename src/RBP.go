@@ -3,6 +3,7 @@ package project
 import (
 	"container/heap"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -17,21 +18,27 @@ var my_node_num int64
 var stamps = []int64{}
 var peers = map[int64]Peer{}
 var timestamping, Qc_updating sync.Mutex
-var Queue_b = map[int64][]MsgRequest{}
+
+// var Queue_b = map[int64][]MsgRequest{}
 var Queue_c = MsgPriorityQueue{}
+
+// Map from the string "sender-sender_seq" to the request and the ack of a
+// particular message
+var Queue_b_1 = map[string]MsgPreReq{}
 
 // Function to initiate the protocol using the given config object
 func InitFromConfig(config Config, my_num int64) {
 	peers = config.Peers
 	token_site = config.InitTokSite
 	next_token_site = (token_site + 1) % int64(len(peers))
-	nts = 0
-	tlv = 0
-	my_node_num = my_num
+	nts = 1
+	tlv = 1
+
 	for i := 0; i < len(config.Peers); i++ {
-		stamps = append(stamps, 0)
-		Queue_b[int64(i)] = []MsgRequest{}
+		stamps = append(stamps, 1)
 	}
+
+	my_node_num = my_num
 	heap.Init(&Queue_c)
 
 	InitDropReqs(&DropReqs)
@@ -75,12 +82,49 @@ func AcceptMessage(min_msg MsgClient) MsgRequest {
 	return msg_req
 }
 
-func AddToMyQb(msg_req MsgRequest) {
-	Queue_b[msg_req.Sender] = append(Queue_b[msg_req.Sender], msg_req)
+func Represent(sender, sender_seq int64) string {
+	return fmt.Sprintf("%d-%d", sender, sender_seq)
+}
+
+func AddMsgReqToQb(msg_req MsgRequest) {
+	Queue_b_1[Represent(msg_req.Sender, msg_req.SenderSeq)] = MsgPreReq{
+		msg_req,
+		MsgAck{},
+	}
+}
+
+func AddMsgAckToQb(msg_ack MsgAck) {
+	Queue_b_1[Represent(msg_ack.Sender, msg_ack.SenderSeq)] = MsgPreReq{
+		MsgRequest{},
+		msg_ack,
+	}
+}
+
+func AddMsgPreReqToQb(msg_req MsgRequest, ack MsgAck) {
+	Queue_b_1[Represent(msg_req.Sender, msg_req.SenderSeq)] = MsgPreReq{
+		msg_req,
+		ack,
+	}
+}
+
+func NotEmptyAck(ack MsgAck) bool {
+	return ack.FinalTS > 0
+}
+
+func NotEmptyReq(req MsgRequest) bool {
+	return req.Tlv > 0
 }
 
 func AcceptMsgRequest(msg_req MsgRequest) {
-	AddToMyQb(msg_req)
+	// Check if the ack for the req has already been received. If yes, then we
+	// can directly sequence it!
+	if val, ok := FindMsgInQb(msg_req.Sender, msg_req.SenderSeq); ok && NotEmptyAck(val.Ack) {
+		AddMsgPreReqToQb(msg_req, val.Ack)
+		SequenceMsg(val.Ack)
+		return
+	} else {
+		AddMsgReqToQb(msg_req)
+	}
 
 	if AmTokenSite() {
 		// Timestamp this message and broadcast ack to everyone else
@@ -166,10 +210,7 @@ func AddStampedMsgToQc(m MsgWithFinalTS) {
 	heap.Push(&Queue_c, &m)
 
 	// Remove the msg_req if it exists in Qb
-	index := FindMsgInQb(m.Sender, m.SenderSeq)
-	if index >= 0 {
-		RemoveMsgFromQb(m.Sender, index)
-	}
+	RemoveMsgFromQb(m.Sender, m.SenderSeq)
 
 	Qc_updating.Unlock()
 
@@ -179,29 +220,16 @@ func AddStampedMsgToQc(m MsgWithFinalTS) {
 // Find the message with the given sender and sender_seq in Qb
 // If found, returns the index of the message inside Qb[sender]
 // If not found, returns -1
-func FindMsgInQb(sender int64, sender_seq int64) int {
-	if sender >= int64(len(Queue_b)) {
-		log.Fatal("Index not found: ")
-	}
-
-	for index, msg := range Queue_b[sender] {
-		if msg.SenderSeq == sender_seq {
-			return index
-		}
-	}
-
-	return -1
+func FindMsgInQb(sender int64, sender_seq int64) (MsgPreReq, bool) {
+	val, ok := Queue_b_1[Represent(sender, sender_seq)]
+	return val, ok
 }
 
 // Remove the given index message from the Qb
 // If sender >= len(Qb) or index >= len(Qb[sender]), this function will fail
 // silently
-func RemoveMsgFromQb(sender int64, index int) {
-	if sender >= int64(len(Queue_b)) || index >= len(Queue_b[sender]) {
-		return
-	}
-
-	Queue_b[sender] = append(Queue_b[sender][:index], Queue_b[sender][index+1:]...)
+func RemoveMsgFromQb(sender int64, sender_seq int64) {
+	delete(Queue_b_1, Represent(sender, sender_seq))
 }
 
 // Use the given MsgAck to remove the message from Qb and add it in it's
@@ -221,15 +249,17 @@ func SequenceMsg(msg_ack MsgAck) {
 	}
 
 	sender := msg_ack.Sender
-	index := FindMsgInQb(sender, msg_ack.SenderSeq)
+	msg_pre_req, ok := FindMsgInQb(sender, msg_ack.SenderSeq)
 
-	if index >= 0 {
-		msg_req := Queue_b[sender][index]
+	if ok && NotEmptyReq(msg_pre_req.Req) {
+		// We already have the request
+		msg_req := msg_pre_req.Req
+
 		m := BuildMsgWithFinalTS(msg_req, msg_ack)
 
 		AddStampedMsgToQc(m)
 
-		RemoveMsgFromQb(sender, index)
+		RemoveMsgFromQb(sender, msg_ack.SenderSeq)
 
 		timestamping.Lock()
 
@@ -238,11 +268,13 @@ func SequenceMsg(msg_ack MsgAck) {
 		timestamping.Unlock()
 
 		return
-	}
+	} else {
+		AddMsgAckToQb(msg_ack)
 
-	// Msg not found! Need to send a retransmission request
-	log.Printf("FAIL NOT FOUND %d, %d, TS %d", sender, msg_ack.SenderSeq, msg_ack.FinalTS)
-	SendRetransmitReq(msg_ack.FinalTS)
+		// Msg not found! Need to send a retransmission request
+		log.Printf("FAIL NOT FOUND %d, %d, TS %d", sender, msg_ack.SenderSeq, msg_ack.FinalTS)
+		SendRetransmitReq(msg_ack.FinalTS)
+	}
 }
 
 type Health struct {
@@ -250,7 +282,7 @@ type Health struct {
 	Nts     int64
 	Tlv     int64
 	TokSite int64
-	Qb      map[int64][]MsgRequest
+	Qb      map[string]MsgPreReq
 	Qc      MsgPriorityQueue
 }
 
@@ -260,7 +292,7 @@ func GetHealthInfo() Health {
 		nts,
 		tlv,
 		token_site,
-		Queue_b,
+		Queue_b_1,
 		Queue_c,
 	}
 }
@@ -284,8 +316,8 @@ func SendRetransmitReq(final_ts int64) {
 func RetransmitMsg(m_rtr MsgRetransmitReq) {
 	for _, msg := range Queue_c {
 		if msg.FinalTS == m_rtr.FinalTS {
-			m_ack := GetMsgAckFromMWFTS(*msg)
-			SendMsgToNode(m_ack, MSG_ACK_PATH, m_rtr.Sender)
+			m_req := GetMsgReqFromMWFTS(*msg)
+			SendMsgToNode(m_req, MSG_REQ_PATH, m_rtr.Sender)
 			return
 		}
 	}

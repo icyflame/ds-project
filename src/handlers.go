@@ -68,10 +68,8 @@ func HealthReqHandler(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Fprint(w, "\n\nQB:\n")
 	for k, v := range t.Qb {
-		fmt.Fprintf(w, "\n\tSender: %d", k)
-		for _, msg := range v {
-			fmt.Fprintf(w, "\n\t\t%#v", msg)
-		}
+		fmt.Fprintf(w, "\n\t%s: ", k)
+		fmt.Fprintf(w, "\n\t\t%#v", v)
 	}
 
 	fmt.Fprintf(w, "\n\nQC: %d msgs\n", len(t.Qc))

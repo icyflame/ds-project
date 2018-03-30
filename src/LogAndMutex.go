@@ -4,17 +4,16 @@ import (
 	"log"
 	"net/http"
 	"sync"
-	"time"
+	// "time"
 )
 
 // Map to indicate to this layer to drop requests.
 // Will drop the next value number of requests that are made to the route that
 // the key refers to
-var DropReqs map[string]int
+var DropReqs = map[string]int{}
 var CheckDrop sync.Mutex
 
 func InitDropReqs(DropReqs *map[string]int) {
-	(*DropReqs) = map[string]int{}
 	for _, r := range routes {
 		(*DropReqs)[r.Name] = 0
 	}
@@ -42,7 +41,7 @@ func SetCrashed(t bool) {
 func LogAndMutex(inner http.Handler, name string, lock sync.Mutex, to_lock bool) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
+		// start := time.Now()
 
 		CheckDrop.Lock()
 
@@ -57,20 +56,20 @@ func LogAndMutex(inner http.Handler, name string, lock sync.Mutex, to_lock bool)
 		} else {
 			CheckDrop.Unlock()
 
-			log.Printf("NO DROP %s, REMAIN %d", name, DropReqs[name])
-
 			if to_lock {
 				lock.Lock()
 			}
 
 			inner.ServeHTTP(w, r)
 
-			log.Printf(
-				"%c\t%s\t%s",
-				r.Method[0],
-				r.RequestURI,
-				time.Since(start),
-			)
+			/*
+			 * log.Printf(
+			 *     "%c\t%s\t%s",
+			 *     r.Method[0],
+			 *     r.RequestURI,
+			 *     time.Since(start),
+			 * )
+			 */
 
 			if to_lock {
 				lock.Unlock()

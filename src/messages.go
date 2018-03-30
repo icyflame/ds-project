@@ -107,6 +107,17 @@ func GetMsgAckFromMWFTS(
 	)
 }
 
+func GetMsgReqFromMWFTS(
+	m_wfts MsgWithFinalTS,
+) MsgRequest {
+	return BuildMsgRequest(
+		m_wfts.Sender,
+		m_wfts.SenderSeq,
+		m_wfts.Tlv,
+		m_wfts.Content,
+	)
+}
+
 type MsgPriorityQueue []*MsgWithFinalTS
 
 func (a MsgPriorityQueue) Len() int {
@@ -154,4 +165,9 @@ func BuildMsgRetransmitReq(
 		final_ts,
 		tlv,
 	}
+}
+
+type MsgPreReq struct {
+	Req MsgRequest
+	Ack MsgAck
 }
