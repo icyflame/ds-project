@@ -7,8 +7,13 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 	"sync"
+	"time"
 )
+
+var TOKEN_TRANSFER_TIME = 10 * (time.Second)
+var TokenTransferring = false
 
 var nts int64
 var tlv int64
@@ -17,7 +22,7 @@ var next_token_site int64
 var my_node_num int64
 var stamps = []int64{}
 var peers = map[int64]Peer{}
-var timestamping, Qc_updating sync.Mutex
+var timestamping, Qc_updating, TokenTransfer sync.Mutex
 
 // var Queue_b = map[int64][]MsgRequest{}
 var Queue_c = MsgPriorityQueue{}
@@ -30,7 +35,7 @@ var Queue_b_1 = map[string]MsgPreReq{}
 func InitFromConfig(config Config, my_num int64) {
 	peers = config.Peers
 	token_site = config.InitTokSite
-	next_token_site = (token_site + 1) % int64(len(peers))
+	next_token_site = token_site
 	nts = 1
 	tlv = 1
 
@@ -42,6 +47,27 @@ func InitFromConfig(config Config, my_num int64) {
 	heap.Init(&Queue_c)
 
 	InitDropReqs(&DropReqs)
+
+	if AmTokenSite() {
+		go InitTokenTransferTimeout(TOKEN_TRANSFER_TIME)
+	}
+}
+
+func InitTokenTransferTimeout(d time.Duration) {
+	if !AmTokenSite() {
+		return
+	}
+
+	c := time.After(d)
+
+	<-c
+
+	next_token_site = int64((my_node_num + 1) % int64(len(peers)))
+	log.Printf("INIT TOK TRANSFER %d -> %d", my_node_num, next_token_site)
+
+	// Send a NULL message indicating to everyone that the token site is going
+	// to change
+	AcceptMessage(MsgClient{})
 }
 
 // Getter function for token_site variable
@@ -70,16 +96,23 @@ func AcceptMessage(min_msg MsgClient) MsgRequest {
 
 	log.Printf("SEND ALL %d, %d", msg_req.Sender, msg_req.SenderSeq)
 
+	msg_accepted := false
+
 	for i := 0; i < len(peers); i++ {
 		v := <-resps
 		if v == 200 {
 			stamps[my_node_num] += 1
 			log.Printf("RECV REQ ACK %d, %d", msg_req.Sender, msg_req.SenderSeq)
+			msg_accepted = true
 			break
 		}
 	}
 
-	return msg_req
+	if !msg_accepted {
+		return MsgRequest{}
+	} else {
+		return msg_req
+	}
 }
 
 func Represent(sender, sender_seq int64) string {
@@ -241,6 +274,17 @@ func SequenceMsg(msg_ack MsgAck) {
 		return
 	}
 
+	// If I am the NextTokSite, then I need to bring myself up to date and get
+	// ready to accept the token. This happens irrespective of how behind I am.
+	if msg_ack.TokSite != my_node_num &&
+		msg_ack.NextTokSite == my_node_num &&
+		msg_ack.TokSite != msg_ack.NextTokSite &&
+		!TokenTransferring {
+		InitRecvTokenMode()
+		IndicateAcceptingToken(msg_ack.TokSite)
+		return
+	}
+
 	if msg_ack.FinalTS > nts {
 		// Can't accept this message until I have all the previous messages
 		// Send retransmission request to the token site for the missed messages
@@ -266,8 +310,6 @@ func SequenceMsg(msg_ack MsgAck) {
 		nts += 1
 
 		timestamping.Unlock()
-
-		return
 	} else {
 		AddMsgAckToQb(msg_ack)
 
@@ -275,15 +317,40 @@ func SequenceMsg(msg_ack MsgAck) {
 		log.Printf("FAIL NOT FOUND %d, %d, TS %d", sender, msg_ack.SenderSeq, msg_ack.FinalTS)
 		SendRetransmitReq(msg_ack.FinalTS, false, true)
 	}
+
+	if msg_ack.TokSite != my_node_num &&
+		msg_ack.NextTokSite != my_node_num &&
+		token_site == msg_ack.TokSite {
+		token_site = msg_ack.NextTokSite
+		log.Printf("RECOGNIZE %d as TOK SITE", token_site)
+	}
+}
+
+// This node indicates to the current token site that it is ready to accept the
+// token. It sends it's identity and the last message it has seen till now to
+// the current token site.
+// The current token site will stop accepting new messages, send all messages to
+// this node to bring it up to date and then send it a special indicator message
+// to tell it that it is up to date.
+// Then, the token transfer will be considered to be complete
+func IndicateAcceptingToken(tok_site int64) {
+	m_tti := BuildTokenTransferInit(my_node_num, nts, tlv)
+	resp := SendMsgToNode(m_tti, MSG_INIT_TOKEN_TRANSFER, tok_site)
+	if resp != 200 {
+		log.Printf("FAIL TTI %d -> %d, LATER", my_node_num, tok_site)
+	} else {
+		log.Printf("SEND TTI %d -> %d, TS %d", my_node_num, tok_site, nts)
+	}
 }
 
 type Health struct {
-	MyNum   int64
-	Nts     int64
-	Tlv     int64
-	TokSite int64
-	Qb      map[string]MsgPreReq
-	Qc      MsgPriorityQueue
+	MyNum       int64
+	Nts         int64
+	Tlv         int64
+	TokSite     int64
+	NextTokSite int64
+	Qb          map[string]MsgPreReq
+	Qc          MsgPriorityQueue
 }
 
 func GetHealthInfo() Health {
@@ -292,6 +359,7 @@ func GetHealthInfo() Health {
 		nts,
 		tlv,
 		token_site,
+		next_token_site,
 		Queue_b_1,
 		Queue_c,
 	}
@@ -332,4 +400,79 @@ func RetransmitMsg(m_rtr MsgRetransmitReq) {
 
 	// Msg not found in Queue (?! SHOULD NOT HAPPEN)
 	log.Printf("PANIC NOT FOUND TS %d", m_rtr.FinalTS)
+}
+
+func RelinquishTokSite() {
+	token_site = next_token_site
+	next_token_site = token_site
+	timestamping.Unlock()
+	Qc_updating.Unlock()
+	TokenTransfer.Lock()
+	TokenTransferring = false
+	TokenTransfer.Unlock()
+}
+
+func BecomeTokenSite() {
+	token_site = my_node_num
+	next_token_site = my_node_num
+	// timestamping.Unlock()
+	// Qc_updating.Unlock()
+	TokenTransfer.Lock()
+	TokenTransferring = false
+	TokenTransfer.Unlock()
+}
+
+func InitSendTokenMode() {
+	timestamping.Lock()
+	Qc_updating.Lock()
+	TokenTransfer.Lock()
+	TokenTransferring = true
+	TokenTransfer.Unlock()
+}
+
+func InitRecvTokenMode() {
+	TokenTransfer.Lock()
+	TokenTransferring = true
+	TokenTransfer.Unlock()
+}
+
+func BringNodeUpToDate(
+	node_num int64,
+	nts int64,
+) int {
+	// Find the latest message on this node
+	// Send everything to `node_num`
+	sort.Sort(Queue_c)
+	latest := Queue_c[len(Queue_c)-1]
+
+	diff := int((*latest).FinalTS + 1 - nts)
+
+	// Send all the messages that the future token site doesn't have to it
+	for i := 0; i < diff; i++ {
+		msg := Queue_c[len(Queue_c)-1-i]
+
+		m_req := GetMsgReqFromMWFTS(*msg)
+		SendMsgToNode(m_req, MSG_REQ_PATH, node_num)
+
+		m_ack := GetMsgAckFromMWFTS(*msg)
+		SendMsgToNode(m_ack, MSG_ACK_PATH, node_num)
+	}
+
+	return diff
+}
+
+func IndicateTokTransferComplete(
+	dest int64,
+) {
+	m_ttc := BuildTokenTransferComplete(my_node_num, dest, nts, tlv)
+	SendMsgToNode(m_ttc, MSG_COMPLETE_TOK_TRANSFER, dest)
+}
+
+func EnsureConsistency(
+	old int64,
+	old_nts int64,
+) {
+	if nts < old_nts {
+		// need to get all the messages from Old
+	}
 }

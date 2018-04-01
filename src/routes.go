@@ -45,6 +45,20 @@ var routes = Routes{
 		"POST",
 		false,
 	},
+	Route{
+		MSG_INIT_TOKEN_TRANSFER,
+		TokenTransferInitHandler,
+		"tti",
+		"POST",
+		false,
+	},
+	Route{
+		MSG_COMPLETE_TOK_TRANSFER,
+		TokenTransferCompleteHandler,
+		"ttc",
+		"POST",
+		false,
+	},
 
 	// DEBUGGING
 	Route{

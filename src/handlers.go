@@ -16,9 +16,14 @@ func AcceptClientMessage(w http.ResponseWriter, r *http.Request) {
 
 	m := AcceptMessage(BuildMsgClient(Data(data)))
 
-	log.Printf("SEND ALL %d, %d", m.Sender, m.SenderSeq)
+	if !NotEmptyReq(m) {
+		// msg_req empty, token site didn't accept the message!
+		http.Error(w, "Token site didn't accept the message, try again after some time", 503)
+	} else {
+		log.Printf("SEND ALL %d, %d", m.Sender, m.SenderSeq)
 
-	fmt.Fprint(w, "Message accepted. Broadcasted to everyone, waiting for token site's ack.\n")
+		fmt.Fprint(w, "Message accepted. Broadcasted to everyone, waiting for token site's ack.\n")
+	}
 }
 
 func AcceptMsgRequestHandler(w http.ResponseWriter, r *http.Request) {
@@ -66,6 +71,8 @@ func HealthReqHandler(w http.ResponseWriter, r *http.Request) {
 		t.Tlv,
 	)
 
+	fmt.Fprintf(w, "Next Token Site: %d\n", t.NextTokSite)
+
 	fmt.Fprint(w, "\n\nQB:\n")
 	for k, v := range t.Qb {
 		fmt.Fprintf(w, "\n\t%s: ", k)
@@ -110,4 +117,46 @@ func DropMsgsHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Sscanf(vars["count"], "%d", &count)
 
 	DropMsgs(vars["name"], count)
+}
+
+func TokenTransferInitHandler(w http.ResponseWriter, r *http.Request) {
+	if !AmTokenSite() {
+		// Only token sites can initiate token transfers
+		http.Error(w, "", 400)
+		return
+	}
+
+	msg_tti_vals := r.PostFormValue("data")
+	msg_tti := MsgTokenTransferInit{}
+	err := json.Unmarshal([]byte(msg_tti_vals), &msg_tti)
+
+	if err != nil {
+		log.Fatal("Couldn't parse token transfer init message: ", err)
+	}
+
+	InitSendTokenMode()
+
+	count := BringNodeUpToDate(msg_tti.Destination, msg_tti.Nts)
+	log.Printf("SEND %d msgs -> %d", count, msg_tti.Destination)
+
+	IndicateTokTransferComplete(msg_tti.Destination)
+	log.Printf("SEND TOK TRANSFER COMPLETE -> %d", msg_tti.Destination)
+
+	RelinquishTokSite()
+	log.Println("NO LONGER TOK SITE")
+}
+
+func TokenTransferCompleteHandler(w http.ResponseWriter, r *http.Request) {
+	msg_ttc_vals := r.PostFormValue("data")
+	msg_ttc := MsgTokenTransferInit{}
+	err := json.Unmarshal([]byte(msg_ttc_vals), &msg_ttc)
+
+	if err != nil {
+		log.Fatal("Couldn't parse token transfer complete message: ", err)
+	}
+
+	// EnsureConsistency(msg_ttc.Old, msg_ttc.Nts)
+
+	BecomeTokenSite()
+	log.Println("BECOME TOK SITE")
 }

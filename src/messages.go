@@ -177,3 +177,42 @@ type MsgPreReq struct {
 	Req MsgRequest
 	Ack MsgAck
 }
+
+type MsgTokenTransferInit struct {
+	Destination int64
+	Nts         int64
+	Tlv         int64
+}
+
+func BuildTokenTransferInit(
+	destination int64,
+	nts int64,
+	tlv int64,
+) MsgTokenTransferInit {
+	return MsgTokenTransferInit{
+		destination,
+		nts,
+		tlv,
+	}
+}
+
+type MsgTokenTransferComplete struct {
+	Old int64
+	New int64
+	Nts int64
+	Tlv int64
+}
+
+func BuildTokenTransferComplete(
+	old int64,
+	new int64,
+	nts int64,
+	tlv int64,
+) MsgTokenTransferComplete {
+	return MsgTokenTransferComplete{
+		old,
+		new,
+		nts,
+		tlv,
+	}
+}
