@@ -49,7 +49,7 @@ func InitFromConfig(config Config, my_num int64) {
 	InitDropReqs(&DropReqs)
 
 	if AmTokenSite() {
-		go InitTokenTransferTimeout(TOKEN_TRANSFER_TIME)
+		BecomeTokenSite()
 	}
 }
 
@@ -320,8 +320,9 @@ func SequenceMsg(msg_ack MsgAck) {
 
 	if msg_ack.TokSite != my_node_num &&
 		msg_ack.NextTokSite != my_node_num &&
-		token_site == msg_ack.TokSite {
+		token_site != msg_ack.TokSite {
 		token_site = msg_ack.NextTokSite
+		next_token_site = msg_ack.NextTokSite
 		log.Printf("RECOGNIZE %d as TOK SITE", token_site)
 	}
 }
@@ -334,12 +335,13 @@ func SequenceMsg(msg_ack MsgAck) {
 // to tell it that it is up to date.
 // Then, the token transfer will be considered to be complete
 func IndicateAcceptingToken(tok_site int64) {
+	log.Printf("RECV TTI %d -> %d, TS %d", my_node_num, tok_site, nts)
 	m_tti := BuildTokenTransferInit(my_node_num, nts, tlv)
 	resp := SendMsgToNode(m_tti, MSG_INIT_TOKEN_TRANSFER, tok_site)
 	if resp != 200 {
-		log.Printf("FAIL TTI %d -> %d, LATER", my_node_num, tok_site)
+		log.Printf("FAIL TTI OK %d -> %d, LATER", my_node_num, tok_site)
 	} else {
-		log.Printf("SEND TTI %d -> %d, TS %d", my_node_num, tok_site, nts)
+		log.Printf("SENT TTI OK %d -> %d, TS %d", my_node_num, tok_site, nts)
 	}
 }
 
@@ -420,6 +422,7 @@ func BecomeTokenSite() {
 	TokenTransfer.Lock()
 	TokenTransferring = false
 	TokenTransfer.Unlock()
+	go InitTokenTransferTimeout(TOKEN_TRANSFER_TIME)
 }
 
 func InitSendTokenMode() {
