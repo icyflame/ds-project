@@ -50,11 +50,39 @@ func InitFromConfig(config Config, my_num int64) {
 
 	InitDropReqs(&DropReqs)
 
+	go RegularQbCleanUp(1)
+
 	if AmTokenSite() {
 		BecomeTokenSite()
 	}
 }
 
+func RegularQbCleanUp(check_from int64) {
+	c := time.After(clean_up_time)
+	<-c
+
+	log.Printf("CLEAN UP >= TS %d", check_from)
+
+	ncf := check_from
+
+	if len(Queue_c) > 0 {
+
+		sort.Sort(Queue_c)
+
+		for i := len(Queue_c) - 1; i >= 0 && Queue_c[i].FinalTS >= check_from; i-- {
+			t := *Queue_c[i]
+			RemoveMsgFromQb(t.Sender, t.SenderSeq)
+		}
+
+		ncf = (*Queue_c[len(Queue_c)-1]).FinalTS
+	}
+
+	go RegularQbCleanUp(ncf)
+	return
+}
+
+// If this node has the token, then it will transfer it to the next site AFTER d
+// duration of time.
 func InitTokenTransferTimeout(d time.Duration) {
 	if !AmTokenSite() {
 		return
