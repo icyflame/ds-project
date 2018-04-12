@@ -504,13 +504,15 @@ func BringNodeUpToDate(
 
 	// Send all the messages that the future token site doesn't have to it
 	for i := 0; i < diff; i++ {
-		msg := Queue_c[len(Queue_c)-1-i]
+		msg := Queue_c[len(Queue_c)-diff+i]
 
 		m_req := GetMsgReqFromMWFTS(*msg)
 		SendMsgToNode(m_req, MSG_REQ_PATH, node_num)
 
 		m_ack := GetMsgAckFromMWFTS(*msg)
 		SendMsgToNode(m_ack, MSG_ACK_PATH, node_num)
+
+		log.Printf("RTR REQ-ACK %d, %d, TS %d -> %d", m_req.Sender, m_req.SenderSeq, m_ack.FinalTS, node_num)
 	}
 
 	return diff
