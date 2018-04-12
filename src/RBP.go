@@ -154,10 +154,13 @@ func AcceptMessage(min_msg MsgClient) MsgRequest {
 	}
 }
 
+// Return a string that acts as the unique identifier for a message (stamped and
+// unstamped)
 func Represent(sender, sender_seq int64) string {
 	return fmt.Sprintf("%d-%d", sender, sender_seq)
 }
 
+// Adds the msg request to the Qb
 func AddMsgReqToQb(msg_req MsgRequest) {
 	Queue_b_1[Represent(msg_req.Sender, msg_req.SenderSeq)] = MsgPreReq{
 		msg_req,
@@ -165,6 +168,7 @@ func AddMsgReqToQb(msg_req MsgRequest) {
 	}
 }
 
+// Adds a msg ack to the Qb (request if in Qb will be over-written)
 func AddMsgAckToQb(msg_ack MsgAck) {
 	Queue_b_1[Represent(msg_ack.Sender, msg_ack.SenderSeq)] = MsgPreReq{
 		MsgRequest{},
@@ -172,6 +176,9 @@ func AddMsgAckToQb(msg_ack MsgAck) {
 	}
 }
 
+// Add a msg request and ack both to Qb. Ready to be stamped and added to Qc
+// (probably waiting because this message still has time until it comes to the
+// top)
 func AddMsgPreReqToQb(msg_req MsgRequest, ack MsgAck) {
 	Queue_b_1[Represent(msg_req.Sender, msg_req.SenderSeq)] = MsgPreReq{
 		msg_req,
@@ -179,14 +186,20 @@ func AddMsgPreReqToQb(msg_req MsgRequest, ack MsgAck) {
 	}
 }
 
+// An ack is empty if FinalTS <= 0. Minimum possible FinalTS is 1
 func NotEmptyAck(ack MsgAck) bool {
 	return ack.FinalTS > 0
 }
 
+// A request is empty if Tlv <= 0. Minimum possible Tlv is 1
 func NotEmptyReq(req MsgRequest) bool {
 	return req.Tlv > 0
 }
 
+// Accept the message request passed as parameter. If the ack is already in Qb,
+// then use that ack and stamp the message.
+// Otherwise, just add the msg request to Qb.
+// If this is also the token site, try and sequence the message
 func AcceptMsgRequest(msg_req MsgRequest) {
 	// Check if the ack for the req has already been received. If yes, then we
 	// can directly sequence it!
