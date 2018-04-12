@@ -15,6 +15,9 @@ import (
 var TOKEN_TRANSFER_TIME = 10 * (time.Second)
 var TokenTransferring = false
 
+var wait_time_for_re_tti = 5 * (time.Second)
+var clean_up_time = 30 * (time.Second)
+
 var nts int64
 var tlv int64
 var token_site int64
@@ -24,7 +27,6 @@ var stamps = []int64{}
 var peers = map[int64]Peer{}
 var timestamping, Qc_updating, TokenTransfer sync.Mutex
 
-// var Queue_b = map[int64][]MsgRequest{}
 var Queue_c = MsgPriorityQueue{}
 
 // Map from the string "sender-sender_seq" to the request and the ack of a
@@ -68,6 +70,15 @@ func InitTokenTransferTimeout(d time.Duration) {
 	// Send a NULL message indicating to everyone that the token site is going
 	// to change
 	AcceptMessage(MsgClient{})
+
+	c = time.After(wait_time_for_re_tti)
+	<-c
+
+	if AmTokenSite() &&
+		!TokenTransferring {
+		log.Printf("RETRY TTI %d -> %d", my_node_num, next_token_site)
+		InitTokenTransferTimeout(d)
+	}
 }
 
 // Getter function for token_site variable
