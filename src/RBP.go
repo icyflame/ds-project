@@ -498,6 +498,8 @@ func SuccessfulTokenTransfer() {
 
 	sort.Ints(to_commit)
 	log.Print("COMMIT: ", to_commit)
+
+	LogCommit(to_commit, my_node_num)
 }
 
 func InitSendTokenMode() {
