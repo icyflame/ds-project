@@ -533,3 +533,7 @@ func EnsureConsistency(
 		// need to get all the messages from Old
 	}
 }
+
+func GetMyNts() int64 {
+	return nts
+}

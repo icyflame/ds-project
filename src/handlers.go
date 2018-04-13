@@ -143,19 +143,17 @@ func TokenTransferInitHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("SEND TOK TRANSFER COMPLETE -> %d", msg_tti.Destination)
 
 	RelinquishTokSite()
-	log.Println("NO LONGER TOK SITE")
+	log.Print("GIVING AWAY TOK SITE RESP")
 }
 
 func TokenTransferCompleteHandler(w http.ResponseWriter, r *http.Request) {
 	msg_ttc_vals := r.PostFormValue("data")
-	msg_ttc := MsgTokenTransferInit{}
+	msg_ttc := MsgTokenTransferComplete{}
 	err := json.Unmarshal([]byte(msg_ttc_vals), &msg_ttc)
 
 	if err != nil {
 		log.Fatal("Couldn't parse token transfer complete message: ", err)
 	}
-
-	// EnsureConsistency(msg_ttc.Old, msg_ttc.Nts)
 
 	BecomeTokenSite()
 	log.Println("BECOME TOK SITE")
