@@ -23,6 +23,8 @@ var tlv int64
 var token_site int64
 var next_token_site int64
 var my_node_num int64
+var LVal int64
+var Commitment = map[int64]int64{}
 var stamps = []int64{}
 var peers = map[int64]Peer{}
 var timestamping, Qc_updating, TokenTransfer sync.Mutex
@@ -40,6 +42,7 @@ func InitFromConfig(config Config, my_num int64) {
 	next_token_site = token_site
 	nts = 1
 	tlv = 1
+	LVal = config.LVal
 
 	for i := 0; i < len(config.Peers); i++ {
 		stamps = append(stamps, 1)
@@ -300,6 +303,8 @@ func AddStampedMsgToQc(m MsgWithFinalTS) {
 	Qc_updating.Unlock()
 
 	log.Printf("QC: %d; New msg: %d, %d", len(Queue_c), m.Sender, m.SenderSeq)
+
+	Commitment[m.FinalTS] = LVal
 }
 
 // Find the message with the given sender and sender_seq in Qb
@@ -376,6 +381,7 @@ func SequenceMsg(msg_ack MsgAck) {
 		token_site = msg_ack.NextTokSite
 		next_token_site = msg_ack.NextTokSite
 		log.Printf("RECOGNIZE %d as TOK SITE", token_site)
+		SuccessfulTokenTransfer()
 	}
 }
 
@@ -464,6 +470,7 @@ func RelinquishTokSite() {
 	TokenTransfer.Lock()
 	TokenTransferring = false
 	TokenTransfer.Unlock()
+	SuccessfulTokenTransfer()
 }
 
 func BecomeTokenSite() {
@@ -475,6 +482,22 @@ func BecomeTokenSite() {
 	TokenTransferring = false
 	TokenTransfer.Unlock()
 	go InitTokenTransferTimeout(TOKEN_TRANSFER_TIME)
+	SuccessfulTokenTransfer()
+}
+
+func SuccessfulTokenTransfer() {
+	to_commit := []int{}
+	for k, v := range Commitment {
+		Commitment[k] = v - 1
+
+		if Commitment[k] <= 0 {
+			to_commit = append(to_commit, int(k))
+			delete(Commitment, k)
+		}
+	}
+
+	sort.Ints(to_commit)
+	log.Print("COMMIT: ", to_commit)
 }
 
 func InitSendTokenMode() {
