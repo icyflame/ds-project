@@ -107,7 +107,7 @@ func InitTokenTransferTimeout(d time.Duration) {
 
 	if AmTokenSite() &&
 		!TokenTransferring {
-		log.Printf("RETRY TTI %d -> %d", my_node_num, next_token_site)
+		log.Printf("RETRY TTI %d -> %d AFTER %d", my_node_num, next_token_site, d)
 		InitTokenTransferTimeout(d)
 	}
 }
@@ -378,8 +378,8 @@ func SequenceMsg(msg_ack MsgAck) {
 	if msg_ack.TokSite != my_node_num &&
 		msg_ack.NextTokSite != my_node_num &&
 		token_site != msg_ack.TokSite {
-		token_site = msg_ack.NextTokSite
-		next_token_site = msg_ack.NextTokSite
+		token_site = msg_ack.TokSite
+		next_token_site = token_site
 		log.Printf("RECOGNIZE %d as TOK SITE", token_site)
 		SuccessfulTokenTransfer()
 	}
@@ -411,6 +411,7 @@ type Health struct {
 	NextTokSite int64
 	Qb          map[string]MsgPreReq
 	Qc          MsgPriorityQueue
+	Commitment  map[int64]int64
 }
 
 func GetHealthInfo() Health {
@@ -422,6 +423,7 @@ func GetHealthInfo() Health {
 		next_token_site,
 		Queue_b_1,
 		Queue_c,
+		Commitment,
 	}
 }
 

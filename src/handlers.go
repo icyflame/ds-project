@@ -73,6 +73,11 @@ func HealthReqHandler(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Fprintf(w, "Next Token Site: %d\n", t.NextTokSite)
 
+	fmt.Fprintf(w, "Commitment: \n")
+	for k, v := range t.Commitment {
+		fmt.Fprintf(w, "%d = %d\n", k, v)
+	}
+
 	fmt.Fprint(w, "\n\nQB:\n")
 	for k, v := range t.Qb {
 		fmt.Fprintf(w, "\n\t%s: ", k)
