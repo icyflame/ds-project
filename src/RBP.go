@@ -375,9 +375,15 @@ func SequenceMsg(msg_ack MsgAck) {
 		SendRetransmitReq(msg_ack.FinalTS, false, true)
 	}
 
-	if msg_ack.TokSite != my_node_num &&
-		msg_ack.NextTokSite != my_node_num &&
-		token_site != msg_ack.TokSite {
+	// If this particular msg ack is not stamped by the token site that I know
+	// of, that implies that a token transfer was completed successfully
+	// somewhere else in the network. Set my token site to the new token site
+	// and recognize that a token transfer has been complete => commit any
+	// messages that have been in the network long enough (i.e messages that
+	// have seen LVal number of token transfers)
+	if token_site != msg_ack.TokSite &&
+		my_node_num != msg_ack.TokSite &&
+		my_node_num != msg_ack.NextTokSite {
 		token_site = msg_ack.TokSite
 		next_token_site = token_site
 		log.Printf("RECOGNIZE %d as TOK SITE", token_site)
