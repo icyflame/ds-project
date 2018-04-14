@@ -44,6 +44,8 @@ func AcceptMsgRequestHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Indicate ACK to the requester
 		fmt.Fprint(w, "")
+	} else {
+		http.Error(w, "ACCEPTED", 201)
 	}
 }
 
@@ -59,6 +61,8 @@ func AcceptMsgAckHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("RECV ACK %d, %d, TS %d", msg_ack.Sender, msg_ack.SenderSeq, msg_ack.FinalTS)
 
 	SequenceMsg(msg_ack)
+
+	ResetTimerTokSiteAlive(msg_ack.TokSite)
 }
 
 func HealthReqHandler(w http.ResponseWriter, r *http.Request) {
@@ -162,4 +166,20 @@ func TokenTransferCompleteHandler(w http.ResponseWriter, r *http.Request) {
 
 	BecomeTokenSite()
 	log.Println("BECOME TOK SITE")
+}
+
+func MsgHeartbeatHandler(w http.ResponseWriter, r *http.Request) {
+	m_vals := r.PostFormValue("data")
+	m := MsgHeartbeat{}
+	err := json.Unmarshal([]byte(m_vals), &m)
+
+	if err != nil {
+		log.Fatal("Couldn't parse heartbeat message: ", err)
+	}
+
+	ResetTimerTokSiteAlive(m.Node)
+
+	if AmTokenSite() {
+		BroadcastHeartbeat()
+	}
 }

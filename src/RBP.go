@@ -17,6 +17,9 @@ var TokenTransferring = false
 
 var wait_time_for_re_tti = 5 * (time.Second)
 var clean_up_time = 30 * (time.Second)
+var tok_site_probe_time = 4 * (time.Second)
+var tok_site_probe_timeout = 2 * (time.Second)
+var NETWORK_TIMEOUT = 3 * (time.Second)
 
 var nts int64
 var tlv int64
@@ -24,10 +27,14 @@ var token_site int64
 var next_token_site int64
 var my_node_num int64
 var LVal int64
+var RVal int
 var Commitment = map[int64]int64{}
 var stamps = []int64{}
 var peers = map[int64]Peer{}
 var timestamping, Qc_updating, TokenTransfer sync.Mutex
+var last_seen time.Time
+
+var RetriesPerMsg = map[string]int{}
 
 var Queue_c = MsgPriorityQueue{}
 
@@ -42,7 +49,18 @@ func InitFromConfig(config Config, my_num int64) {
 	next_token_site = token_site
 	nts = 1
 	tlv = 1
+
 	LVal = config.LVal
+	if LVal <= 0 {
+		LVal = 2
+	}
+
+	RVal = int(config.RVal)
+	if RVal <= 0 {
+		RVal = 3
+	}
+
+	last_seen = time.Now()
 
 	for i := 0; i < len(config.Peers); i++ {
 		stamps = append(stamps, 1)
@@ -58,6 +76,39 @@ func InitFromConfig(config Config, my_num int64) {
 	if AmTokenSite() {
 		BecomeTokenSite()
 	}
+
+	if !AmTokenSite() {
+		go StartTokSiteProbeTimer()
+	}
+}
+
+func StartTokSiteProbeTimer() {
+	c := time.After(tok_site_probe_time)
+	<-c
+
+	t := time.Now()
+	elapsed := t.Sub(last_seen)
+
+	if elapsed > tok_site_probe_timeout {
+		// Tok site might not be alive! Broadcast a Heartbeat now!
+		BroadcastHeartbeat()
+	}
+
+	return
+}
+
+func ResetTimerTokSiteAlive(
+	node int64,
+) {
+	if node == token_site {
+		last_seen = time.Now()
+	}
+}
+
+func BroadcastHeartbeat() {
+	BroadcastMsg(MsgHeartbeat{
+		my_node_num,
+	}, MSG_HEARTBEAT)
 }
 
 func RegularQbCleanUp(check_from int64) {
@@ -130,31 +181,60 @@ func AcceptMessage(min_msg MsgClient) MsgRequest {
 		min_msg.Content,
 	)
 
-	// Send to everyone else
-	resps := BroadcastMsg(msg_req, MSG_REQ_PATH)
+	return TransmitMsgReq(msg_req)
+}
 
-	// Accept the message yourself
-	AcceptMsgRequest(msg_req)
+func TransmitMsgReq(msg_req MsgRequest) MsgRequest {
+	rep := Represent(msg_req.Sender, msg_req.SenderSeq)
 
-	log.Printf("SEND ALL %d, %d", msg_req.Sender, msg_req.SenderSeq)
+	RetriesPerMsg[rep] += 1
 
-	msg_accepted := false
+	if RetriesPerMsg[rep] >= RVal {
+		log.Print("TOKEN SITE FAIL DETECTED")
+		log.Print(RetriesPerMsg)
+	} else {
 
-	for i := 0; i < len(peers); i++ {
-		v := <-resps
-		if v == 200 {
-			stamps[my_node_num] += 1
-			log.Printf("RECV REQ ACK %d, %d", msg_req.Sender, msg_req.SenderSeq)
+		// Send to everyone else
+		resps := BroadcastMsg(msg_req, MSG_REQ_PATH)
+
+		// Accept the message yourself
+		AcceptMsgRequest(msg_req)
+
+		log.Printf("SEND ALL %d, %d. TRY %d", msg_req.Sender, msg_req.SenderSeq, RetriesPerMsg[rep])
+
+		msg_accepted := false
+
+		// If I am not the token site, then I have to ensure that the token site
+		// accepts this msg req. If not, then I have to keep retrying!
+		if AmTokenSite() {
 			msg_accepted = true
-			break
+		} else {
+			for i := 0; i < len(peers); i++ {
+				select {
+				case <-time.After(NETWORK_TIMEOUT):
+					log.Printf("NETWORK TIMEOUT")
+					continue
+				case v := <-resps:
+					if v == 200 {
+						stamps[my_node_num] += 1
+						log.Printf("OK ACK DELIVER %d, %d", msg_req.Sender, msg_req.SenderSeq)
+						msg_accepted = true
+						break
+					}
+				}
+			}
+		}
+
+		if !msg_accepted {
+			log.Printf("FAIL ACK DELIVER %d, %d", msg_req.Sender, msg_req.SenderSeq)
+			TransmitMsgReq(msg_req)
+			return MsgRequest{}
+		} else {
+			return msg_req
 		}
 	}
 
-	if !msg_accepted {
-		return MsgRequest{}
-	} else {
-		return msg_req
-	}
+	return MsgRequest{}
 }
 
 // Return a string that acts as the unique identifier for a message (stamped and
@@ -556,17 +636,4 @@ func IndicateTokTransferComplete(
 ) {
 	m_ttc := BuildTokenTransferComplete(my_node_num, dest, nts, tlv)
 	SendMsgToNode(m_ttc, MSG_COMPLETE_TOK_TRANSFER, dest)
-}
-
-func EnsureConsistency(
-	old int64,
-	old_nts int64,
-) {
-	if nts < old_nts {
-		// need to get all the messages from Old
-	}
-}
-
-func GetMyNts() int64 {
-	return nts
 }

@@ -216,3 +216,7 @@ func BuildTokenTransferComplete(
 		tlv,
 	}
 }
+
+type MsgHeartbeat struct {
+	Node int64
+}

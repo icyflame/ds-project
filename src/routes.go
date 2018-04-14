@@ -59,6 +59,13 @@ var routes = Routes{
 		"POST",
 		false,
 	},
+	Route{
+		MSG_HEARTBEAT,
+		MsgHeartbeatHandler,
+		"hbh",
+		"POST",
+		false,
+	},
 
 	// DEBUGGING
 	Route{

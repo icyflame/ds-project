@@ -11,5 +11,6 @@
         }
     },
     "InitTokSite": 1,
-    "LVal": 2
+    "LVal": 2,
+    "RVal": 3
 }

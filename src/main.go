@@ -19,6 +19,7 @@ type Config struct {
 	Peers       map[int64]Peer
 	InitTokSite int64
 	LVal        int64
+	RVal        int64
 }
 
 func Main() {
