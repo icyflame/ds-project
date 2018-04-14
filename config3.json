@@ -1,0 +1,16 @@
+{
+    "Peers": {
+        "0": {
+            "IP": "http://localhost:8080"
+        },
+        "1": {
+            "IP": "http://localhost:8081"
+        },
+        "2": {
+            "IP": "http://localhost:8082"
+        }
+    },
+    "InitTokSite": 1,
+    "LVal": 2,
+    "RVal": 3
+}
