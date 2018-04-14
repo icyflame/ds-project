@@ -209,18 +209,17 @@ func TransmitMsgReq(msg_req MsgRequest) MsgRequest {
 		if AmTokenSite() {
 			msg_accepted = true
 		} else {
-			for i := 0; i < len(peers); i++ {
-				select {
-				case <-time.After(NETWORK_TIMEOUT):
-					log.Printf("NETWORK TIMEOUT")
-					continue
-				case v := <-resps:
-					if v == 200 {
-						stamps[my_node_num] += 1
-						log.Printf("OK ACK DELIVER %d, %d", msg_req.Sender, msg_req.SenderSeq)
-						msg_accepted = true
-						break
-					}
+			// Resps is a channel which will have ONLY the response code of the
+			// response from the token site. All the other responses will be
+			// discarded because we don't care about them
+			select {
+			case <-time.After(NETWORK_TIMEOUT):
+				log.Printf("NETWORK TIMEOUT")
+			case v := <-resps:
+				if v == 200 {
+					stamps[my_node_num] += 1
+					log.Printf("OK ACK DELIVER %d, %d", msg_req.Sender, msg_req.SenderSeq)
+					msg_accepted = true
 				}
 			}
 		}
@@ -316,7 +315,10 @@ func BroadcastMsg(
 			continue
 		}
 		go func(j int) {
-			resps <- SendMsgToNode(msg, path, int64(j))
+			r := SendMsgToNode(msg, path, int64(j))
+			if int64(j) == token_site {
+				resps <- r
+			}
 		}(i)
 	}
 
@@ -521,10 +523,10 @@ func SendRetransmitReq(final_ts int64, have_req, have_ack bool) {
 	m_rtr := BuildMsgRetransmitReq(my_node_num, final_ts, tlv, have_req, have_ack)
 	resp := SendMsgToNode(m_rtr, MSG_RETRANSMIT_REQ_PATH, token_site)
 	if resp != 200 {
-		log.Printf("FAIL RTR %d -> %d for %d", my_node_num,
+		log.Printf("FAIL RTR DELIVER %d -> %d for %d", my_node_num,
 			token_site, final_ts)
 	} else {
-		log.Printf("SEND RTR %d -> %d for %d", my_node_num,
+		log.Printf("OK RTR DELIVER %d -> %d for %d", my_node_num,
 			token_site, final_ts)
 	}
 }
