@@ -158,7 +158,7 @@ func InitTokenTransferTimeout(d time.Duration) {
 
 	if AmTokenSite() &&
 		!TokenTransferring {
-		log.Printf("RETRY TTI %d -> %d AFTER %d", my_node_num, next_token_site, d)
+		log.Printf("RETRY TTI %d -> %d AFTER %v", my_node_num, next_token_site, d)
 		InitTokenTransferTimeout(d)
 	}
 }
@@ -189,10 +189,15 @@ func TransmitMsgReq(msg_req MsgRequest) MsgRequest {
 
 	RetriesPerMsg[rep] += 1
 
+	log.Printf("Inside transmit msg req")
+
 	if RetriesPerMsg[rep] >= RVal {
 		log.Print("TOKEN SITE FAIL DETECTED")
 		log.Print(RetriesPerMsg)
+		delete(RetriesPerMsg, rep)
 	} else {
+
+		log.Printf("broadcasting to everyone")
 
 		// Send to everyone else
 		resps := BroadcastMsg(msg_req, MSG_REQ_PATH)
@@ -205,22 +210,25 @@ func TransmitMsgReq(msg_req MsgRequest) MsgRequest {
 		msg_accepted := false
 
 		// If I am not the token site, then I have to ensure that the token site
-		// accepts this msg req. If not, then I have to keep retrying!
-		if AmTokenSite() {
-			msg_accepted = true
-		} else {
-			// Resps is a channel which will have ONLY the response code of the
-			// response from the token site. All the other responses will be
-			// discarded because we don't care about them
-			select {
-			case <-time.After(NETWORK_TIMEOUT):
-				log.Printf("NETWORK TIMEOUT")
-			case v := <-resps:
-				if v == 200 {
-					stamps[my_node_num] += 1
-					log.Printf("OK ACK DELIVER %d, %d", msg_req.Sender, msg_req.SenderSeq)
-					msg_accepted = true
-				}
+		// accepts this msg req. If not, then I have to keep retrying! If I am
+		// the token site, then discard all this, and consider the message to be
+		// accepted! (Push a 200 in the resps channel to simulate acceptance)
+
+		// Resps is a channel which will have ONLY the response code of the
+		// response from the token site. All the other responses will be
+		// discarded because we don't care about them
+
+		// If I am the token site, then there will be nothing in resps. We
+		// have to populate it here so that rest of this will work properly
+
+		select {
+		case <-time.After(NETWORK_TIMEOUT):
+			log.Printf("NETWORK TIMEOUT")
+		case v := <-resps:
+			if v == 200 {
+				stamps[my_node_num] += 1
+				log.Printf("OK ACK DELIVER %d, %d", msg_req.Sender, msg_req.SenderSeq)
+				msg_accepted = true
 			}
 		}
 
@@ -232,6 +240,8 @@ func TransmitMsgReq(msg_req MsgRequest) MsgRequest {
 			return msg_req
 		}
 	}
+
+	log.Printf("exiting transmit msg req")
 
 	return MsgRequest{}
 }
@@ -311,7 +321,13 @@ func BroadcastMsg(
 ) chan int {
 	resps := make(chan int)
 	for i := 0; i < len(peers); i++ {
+		log.Printf("Sending to %d", i)
 		if int64(i) == my_node_num {
+			go func() {
+				if AmTokenSite() {
+					resps <- 200
+				}
+			}()
 			continue
 		}
 		go func(j int) {

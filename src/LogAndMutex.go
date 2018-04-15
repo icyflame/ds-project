@@ -52,6 +52,8 @@ func LogAndMutex(inner http.Handler, name string, lock sync.Mutex, to_lock bool)
 
 			CheckDrop.Unlock()
 
+			http.Error(w, "", 400)
+
 			return
 		} else {
 			CheckDrop.Unlock()
