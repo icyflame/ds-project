@@ -76,10 +76,6 @@ func InitFromConfig(config Config, my_num int64) {
 	if AmTokenSite() {
 		BecomeTokenSite()
 	}
-
-	if !AmTokenSite() {
-		go StartTokSiteProbeTimer()
-	}
 }
 
 func StartTokSiteProbeTimer() {
@@ -137,8 +133,13 @@ func RegularQbCleanUp(check_from int64) {
 
 // If this node has the token, then it will transfer it to the next site AFTER d
 // duration of time.
-func InitTokenTransferTimeout(d time.Duration) {
+func InitTokenTransferTimeout(d time.Duration, retry_count int) {
 	if !AmTokenSite() {
+		return
+	}
+
+	if retry_count >= RVal {
+		log.Printf("DETECT %d FAILURE", next_token_site)
 		return
 	}
 
@@ -159,7 +160,7 @@ func InitTokenTransferTimeout(d time.Duration) {
 	if AmTokenSite() &&
 		!TokenTransferring {
 		log.Printf("RETRY TTI %d -> %d AFTER %v", my_node_num, next_token_site, d)
-		InitTokenTransferTimeout(d)
+		InitTokenTransferTimeout(d, retry_count+1)
 	}
 }
 
@@ -587,7 +588,7 @@ func BecomeTokenSite() {
 	TokenTransfer.Lock()
 	TokenTransferring = false
 	TokenTransfer.Unlock()
-	go InitTokenTransferTimeout(TOKEN_TRANSFER_TIME)
+	go InitTokenTransferTimeout(TOKEN_TRANSFER_TIME, 0)
 	SuccessfulTokenTransfer()
 }
 
