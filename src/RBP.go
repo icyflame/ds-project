@@ -166,12 +166,16 @@ func InitTLVChange(site int64) {
 	CompleteTLVChange()
 }
 
+// Prepare this node for a TLV change. Gain the TLV Change lock which ensures
+// that two separate TLV changes can't occur at the same time
 func PrepareForTlv(initiator int64) {
 	TLVChange.Lock()
 	TLVChanging = true
 	TLVInitiator = initiator
 }
 
+// Terminate the TLV change routine, this will put this node in a state to
+// accept new messages
 func TerminateTLVChange() {
 	TLVChange.Unlock()
 	TLVChanging = false
@@ -189,6 +193,8 @@ type TLVChangeComplete struct {
 	TokenSite int64
 }
 
+// Prepare the initiator node for a TLV change. this mainly sets all the
+// variables to their default values
 func PrepTLVAsInit() {
 	Mapper = []Changed{}
 	NewPeers = map[int64]Peer{}
@@ -196,6 +202,9 @@ func PrepTLVAsInit() {
 	TentativeTokSite = 0
 }
 
+// When the TLV timeout expires, we will be ready with a new list of peers and
+// IPs and the new token site. This function will construct the new token list
+// and send it to all the other nodes
 func CompleteTLVChange() {
 	TLVChanging = false
 	tlv = new_tlv
@@ -223,6 +232,8 @@ func CompleteTLVChange() {
 	TerminateTLVChange()
 }
 
+// When the TLV changes, this function will be called and it will put the new
+// list of peers, the tlv value and the token site in the config for this node
 func FixForChangedTLV(m TLVChangeComplete) {
 	peers = m.Peers
 	tlv = m.Tlv
@@ -239,6 +250,9 @@ func FixForChangedTLV(m TLVChangeComplete) {
 	log.Printf("I am Node %d NOW", my_node_num)
 }
 
+// When a site receives a "TLV Change" message from an initiator, it will accept
+// the change by sending the initiator it's newest timestamp value and it's node
+// ID
 func AcceptTLVChange(m MsgTLVChange) {
 	if !TLVChanging {
 		return
@@ -250,6 +264,8 @@ func AcceptTLVChange(m MsgTLVChange) {
 	SendMsgToNode(m_acc_tlv, MSG_TLV_ACCEPTED, m.Initiator)
 }
 
+// When an initiator receives an "Accept TLV" change from another node, it will
+// run this function to add that new node to the New list of peers.
 func AddToNewTLV(m MsgAcceptTLV) {
 	node := m.Node
 
