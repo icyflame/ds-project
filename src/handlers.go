@@ -183,3 +183,51 @@ func MsgHeartbeatHandler(w http.ResponseWriter, r *http.Request) {
 		BroadcastHeartbeat()
 	}
 }
+
+func MsgTlvHandler(w http.ResponseWriter, r *http.Request) {
+	m_vals := r.PostFormValue("data")
+	m := MsgTLVChange{}
+	err := json.Unmarshal([]byte(m_vals), &m)
+
+	if err != nil {
+		log.Fatal("Couldn't parse heartbeat message: ", err)
+	}
+
+	// What if I am already at an advanced TLV?
+	// TODO
+
+	// Initiate a TLV change
+	log.Printf("RECV TLV CHANGE from %d", m.Initiator)
+	PrepareForTlv(m.Initiator)
+
+	AcceptTLVChange(m)
+}
+
+func AcceptTlvHandler(w http.ResponseWriter, r *http.Request) {
+	m_vals := r.PostFormValue("data")
+	m := MsgAcceptTLV{}
+	err := json.Unmarshal([]byte(m_vals), &m)
+
+	if err != nil {
+		log.Fatal("Couldn't parse heartbeat message: ", err)
+	}
+
+	log.Printf("RECV TLV ACC from %d", m.Node)
+
+	AddToNewTLV(m)
+}
+
+func TlvChangeCompleteHandler(w http.ResponseWriter, r *http.Request) {
+	m_vals := r.PostFormValue("data")
+	m := TLVChangeComplete{}
+	err := json.Unmarshal([]byte(m_vals), &m)
+
+	if err != nil {
+		log.Fatal("Couldn't parse heartbeat message: ", err)
+	}
+
+	log.Printf("RECV TLV DONE -> %d, TOK SITE %d", m.Tlv, m.TokenSite)
+
+	FixForChangedTLV(m)
+	TerminateTLVChange()
+}

@@ -13,16 +13,19 @@ import (
 )
 
 var TOKEN_TRANSFER_TIME = 10 * (time.Second)
-var TokenTransferring = false
-
 var wait_time_for_re_tti = 5 * (time.Second)
 var clean_up_time = 30 * (time.Second)
 var tok_site_probe_time = 4 * (time.Second)
 var tok_site_probe_timeout = 2 * (time.Second)
 var NETWORK_TIMEOUT = 3 * (time.Second)
+var TLV_TIMEOUT = 20 * (time.Second)
+
+var TokenTransferring = false
+var TLVChanging = false
 
 var nts int64
 var tlv int64
+var new_tlv int64
 var token_site int64
 var next_token_site int64
 var my_node_num int64
@@ -31,7 +34,14 @@ var RVal int
 var Commitment = map[int64]int64{}
 var stamps = []int64{}
 var peers = map[int64]Peer{}
-var timestamping, Qc_updating, TokenTransfer sync.Mutex
+
+var NewPeers = map[int64]Peer{}
+var Mapper = []Changed{}
+var TentativeTokSite int64
+var HighestNTSSeen int64
+
+var TLVInitiator int64
+var timestamping, Qc_updating, TokenTransfer, TLVChange, NewTLChanging sync.Mutex
 var last_seen time.Time
 
 var RetriesPerMsg = map[string]int{}
@@ -131,6 +141,136 @@ func RegularQbCleanUp(check_from int64) {
 	return
 }
 
+// Start the reformation phase to remove `site` from the existing token list and
+// eventually start accepting messages again
+func InitTLVChange(site int64) {
+	if TLVChanging {
+		return
+	}
+
+	log.Printf("INIT TLV CHANGE: %d failed", site)
+	new_tlv = tlv + 1
+	t := BuildMsgTLVChange(my_node_num, site, tlv, new_tlv)
+
+	PrepareForTlv(my_node_num)
+	PrepTLVAsInit()
+
+	my_acc := MsgAcceptTLV{my_node_num, nts}
+	AddToNewTLV(my_acc)
+
+	BroadcastMsg(t, MSG_TLV_CHANGE_PATH)
+
+	c := time.After(TLV_TIMEOUT)
+	<-c
+
+	CompleteTLVChange()
+}
+
+func PrepareForTlv(initiator int64) {
+	TLVChange.Lock()
+	TLVChanging = true
+	TLVInitiator = initiator
+}
+
+func TerminateTLVChange() {
+	TLVChange.Unlock()
+	TLVChanging = false
+}
+
+type Changed struct {
+	Old int64
+	New int64
+}
+
+type TLVChangeComplete struct {
+	Peers     map[int64]Peer
+	Mapping   map[int64]int64
+	Tlv       int64
+	TokenSite int64
+}
+
+func PrepTLVAsInit() {
+	Mapper = []Changed{}
+	NewPeers = map[int64]Peer{}
+	HighestNTSSeen = -1
+	TentativeTokSite = 0
+}
+
+func CompleteTLVChange() {
+	TLVChanging = false
+	tlv = new_tlv
+	new_tlv = 0
+
+	// Send the peers and old to new number mappings to all the nodes in the new
+	// peers list
+
+	mapping := map[int64]int64{}
+	for _, v := range Mapper {
+		mapping[v.Old] = v.New
+	}
+
+	m := TLVChangeComplete{
+		NewPeers,
+		mapping,
+		tlv,
+		TentativeTokSite,
+	}
+
+	FixForChangedTLV(m)
+
+	BroadcastMsg(m, MSG_TLV_COMPLETED)
+
+	TerminateTLVChange()
+}
+
+func FixForChangedTLV(m TLVChangeComplete) {
+	peers = m.Peers
+	tlv = m.Tlv
+	my_node_num = m.Mapping[my_node_num]
+
+	token_site = m.TokenSite
+	next_token_site = m.TokenSite
+
+	if AmTokenSite() {
+		BecomeTokenSite()
+	}
+
+	log.Println("OK TLV CHANGE")
+	log.Printf("I am Node %d NOW", my_node_num)
+}
+
+func AcceptTLVChange(m MsgTLVChange) {
+	if !TLVChanging {
+		return
+	}
+
+	tlv = m.NewTLV
+
+	m_acc_tlv := MsgAcceptTLV{my_node_num, nts}
+	SendMsgToNode(m_acc_tlv, MSG_TLV_ACCEPTED, m.Initiator)
+}
+
+func AddToNewTLV(m MsgAcceptTLV) {
+	node := m.Node
+
+	NewTLChanging.Lock()
+
+	new_id := int64(len(NewPeers))
+	Mapper = append(Mapper, Changed{
+		node,
+		new_id,
+	})
+	NewPeers[new_id] = Peer{peers[node].IP}
+
+	if HighestNTSSeen < m.NTS {
+		HighestNTSSeen = m.NTS
+		TentativeTokSite = m.Node
+		log.Printf("POSSIBLE TOK SITE: %d", m.Node)
+	}
+
+	NewTLChanging.Unlock()
+}
+
 // If this node has the token, then it will transfer it to the next site AFTER d
 // duration of time.
 func InitTokenTransferTimeout(d time.Duration, retry_count int) {
@@ -140,6 +280,7 @@ func InitTokenTransferTimeout(d time.Duration, retry_count int) {
 
 	if retry_count >= RVal {
 		log.Printf("DETECT %d FAILURE", next_token_site)
+		InitTLVChange(next_token_site)
 		return
 	}
 
@@ -193,9 +334,10 @@ func TransmitMsgReq(msg_req MsgRequest) MsgRequest {
 	log.Printf("Inside transmit msg req")
 
 	if RetriesPerMsg[rep] >= RVal {
-		log.Print("TOKEN SITE FAIL DETECTED")
+		log.Print("DETECT TOKEN SITE %d FAIL", token_site)
 		log.Print(RetriesPerMsg)
 		delete(RetriesPerMsg, rep)
+		InitTLVChange(token_site)
 	} else {
 
 		log.Printf("broadcasting to everyone")
@@ -322,7 +464,6 @@ func BroadcastMsg(
 ) chan int {
 	resps := make(chan int)
 	for i := 0; i < len(peers); i++ {
-		log.Printf("Sending to %d", i)
 		if int64(i) == my_node_num {
 			go func() {
 				if AmTokenSite() {

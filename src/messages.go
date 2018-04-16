@@ -220,3 +220,29 @@ func BuildTokenTransferComplete(
 type MsgHeartbeat struct {
 	Node int64
 }
+
+type MsgTLVChange struct {
+	Initiator  int64
+	FailedSite int64
+	OldTLV     int64
+	NewTLV     int64
+}
+
+func BuildMsgTLVChange(
+	init int64,
+	failed int64,
+	old int64,
+	new int64,
+) MsgTLVChange {
+	return MsgTLVChange{
+		init,
+		failed,
+		old,
+		new,
+	}
+}
+
+type MsgAcceptTLV struct {
+	Node int64
+	NTS  int64
+}

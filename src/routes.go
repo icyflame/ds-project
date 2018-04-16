@@ -66,6 +66,27 @@ var routes = Routes{
 		"POST",
 		false,
 	},
+	Route{
+		MSG_TLV_CHANGE_PATH,
+		MsgTlvHandler,
+		"tlv",
+		"POST",
+		true,
+	},
+	Route{
+		MSG_TLV_ACCEPTED,
+		AcceptTlvHandler,
+		"tlvacc",
+		"POST",
+		true,
+	},
+	Route{
+		MSG_TLV_COMPLETED,
+		TlvChangeCompleteHandler,
+		"tlvdone",
+		"POST",
+		false,
+	},
 
 	// DEBUGGING
 	Route{
