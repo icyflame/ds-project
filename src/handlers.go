@@ -179,6 +179,8 @@ func MsgHeartbeatHandler(w http.ResponseWriter, r *http.Request) {
 
 	ResetTimerTokSiteAlive(m.Node)
 
+	log.Printf("RECD HEARTBEAT FROM %d", m.Node)
+
 	if AmTokenSite() {
 		BroadcastHeartbeat()
 	}

@@ -15,7 +15,7 @@ import (
 var TOKEN_TRANSFER_TIME = 10 * (time.Second)
 var wait_time_for_re_tti = 5 * (time.Second)
 var clean_up_time = 30 * (time.Second)
-var tok_site_probe_time = 4 * (time.Second)
+var tok_site_probe_time = 2 * 60 * (time.Second)
 var tok_site_probe_timeout = 2 * (time.Second)
 var NETWORK_TIMEOUT = 3 * (time.Second)
 var TLV_TIMEOUT = 20 * (time.Second)
@@ -83,6 +83,8 @@ func InitFromConfig(config Config, my_num int64) {
 
 	go RegularQbCleanUp(1)
 
+	go StartTokSiteProbeTimer()
+
 	if AmTokenSite() {
 		BecomeTokenSite()
 	}
@@ -95,9 +97,12 @@ func StartTokSiteProbeTimer() {
 	t := time.Now()
 	elapsed := t.Sub(last_seen)
 
+	log.Printf("INSIDE HEARTBEAT")
+
 	if elapsed > tok_site_probe_timeout {
 		// Tok site might not be alive! Broadcast a Heartbeat now!
 		BroadcastHeartbeat()
+		log.Printf("SEND HEARTBEAT NOW")
 	}
 
 	return
