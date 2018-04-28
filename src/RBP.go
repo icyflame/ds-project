@@ -12,13 +12,33 @@ import (
 	"time"
 )
 
-var TOKEN_TRANSFER_TIME = 10 * (time.Second)
+// Time between getting the token and attempting a token transfer
+var TOKEN_TRANSFER_TIME = 15 * (time.Second)
+
+// Time to wait for an "I will accept the token" response from the intended
+// future token site
 var wait_time_for_re_tti = 5 * (time.Second)
+
+// Function to clean up Qb will be run periodically at this rate
 var clean_up_time = 30 * (time.Second)
+
+// Time to wait for a heartbeat before probing to see if the token site is alive
+// or not
 var tok_site_probe_time = 2 * 60 * (time.Second)
+
+// Time allowed between the last message from the token site (last_seen of the
+// token site) and current time. If more than this time elapses and we haven't
+// received anything from the token site, a heartbeat will be broadcasted
 var tok_site_probe_timeout = 2 * (time.Second)
+
+// Timeout to retry network requests after
 var NETWORK_TIMEOUT = 3 * (time.Second)
+
+// Time to wait after broadcasting a TLV change to all the nodes for their
+// respective replies
 var TLV_TIMEOUT = 20 * (time.Second)
+
+var HB_UNREPLIED_ALLOWED = 3
 
 var TokenTransferring = false
 var TLVChanging = false
@@ -29,6 +49,7 @@ var new_tlv int64
 var token_site int64
 var next_token_site int64
 var my_node_num int64
+var hbs_not_replied_to int
 var LVal int64
 var RVal int
 var Commitment = map[int64]int64{}
@@ -76,6 +97,23 @@ func InitFromConfig(config Config, my_num int64) {
 		stamps = append(stamps, 1)
 	}
 
+	if config.TTI != 0 &&
+		config.ReTTI != 0 &&
+		config.CleanUp != 0 &&
+		config.TokSiteProbe != 0 &&
+		config.TokSiteElapsed != 0 &&
+		config.Network != 0 &&
+		config.TLV != 0 {
+
+		TOKEN_TRANSFER_TIME = time.Duration(config.TTI) * (time.Second)
+		wait_time_for_re_tti = time.Duration(config.ReTTI) * (time.Second)
+		clean_up_time = time.Duration(config.CleanUp) * (time.Second)
+		tok_site_probe_time = time.Duration(config.TokSiteProbe) * (time.Second)
+		tok_site_probe_timeout = time.Duration(config.TokSiteElapsed) * (time.Second)
+		NETWORK_TIMEOUT = time.Duration(config.Network) * (time.Second)
+		TLV_TIMEOUT = time.Duration(config.TLV) * (time.Second)
+	}
+
 	my_node_num = my_num
 	heap.Init(&Queue_c)
 
@@ -97,12 +135,15 @@ func StartTokSiteProbeTimer() {
 	t := time.Now()
 	elapsed := t.Sub(last_seen)
 
-	log.Printf("INSIDE HEARTBEAT")
-
 	if elapsed > tok_site_probe_timeout {
 		// Tok site might not be alive! Broadcast a Heartbeat now!
 		BroadcastHeartbeat()
 		log.Printf("SEND HEARTBEAT NOW")
+		hbs_not_replied_to += 1
+
+		if hbs_not_replied_to > HB_UNREPLIED_ALLOWED {
+			InitTLVChange(token_site)
+		}
 	}
 
 	return
@@ -113,6 +154,7 @@ func ResetTimerTokSiteAlive(
 ) {
 	if node == token_site {
 		last_seen = time.Now()
+		hbs_not_replied_to = 0
 	}
 }
 

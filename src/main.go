@@ -16,10 +16,11 @@ type Peer struct {
 }
 
 type Config struct {
-	Peers       map[int64]Peer
-	InitTokSite int64
-	LVal        int64
-	RVal        int64
+	Peers                                                           map[int64]Peer
+	InitTokSite                                                     int64
+	LVal                                                            int64
+	RVal                                                            int64
+	TTI, ReTTI, CleanUp, TokSiteProbe, TokSiteElapsed, Network, TLV int64
 }
 
 func Main() {
