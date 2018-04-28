@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"sort"
@@ -25,6 +26,11 @@ var clean_up_time = 30 * (time.Second)
 // Time to wait for a heartbeat before probing to see if the token site is alive
 // or not
 var tok_site_probe_time = 2 * 60 * (time.Second)
+
+// The timeout will be selected to be the base timeout added to a random timeout
+// to avoid two nodes starting a TLV change at the same time (which will lead to
+// each partitioning the other out!)
+var tok_site_probe_range = 10 * (time.Second)
 
 // Time allowed between the last message from the token site (last_seen of the
 // token site) and current time. If more than this time elapses and we haven't
@@ -75,6 +81,7 @@ var Queue_b_1 = map[string]MsgPreReq{}
 
 // Function to initiate the protocol using the given config object
 func InitFromConfig(config Config, my_num int64) {
+	rand.Seed(time.Now().UnixNano())
 	peers = config.Peers
 	token_site = config.InitTokSite
 	next_token_site = token_site
@@ -109,6 +116,7 @@ func InitFromConfig(config Config, my_num int64) {
 		wait_time_for_re_tti = time.Duration(config.ReTTI) * (time.Second)
 		clean_up_time = time.Duration(config.CleanUp) * (time.Second)
 		tok_site_probe_time = time.Duration(config.TokSiteProbe) * (time.Second)
+		tok_site_probe_range = time.Duration(config.TokSiteRange) * (time.Second)
 		tok_site_probe_timeout = time.Duration(config.TokSiteElapsed) * (time.Second)
 		NETWORK_TIMEOUT = time.Duration(config.Network) * (time.Second)
 		TLV_TIMEOUT = time.Duration(config.TLV) * (time.Second)
@@ -129,7 +137,8 @@ func InitFromConfig(config Config, my_num int64) {
 }
 
 func StartTokSiteProbeTimer() {
-	c := time.After(tok_site_probe_time)
+	rand_timeout := tok_site_probe_time + time.Duration(rand.Float32())*tok_site_probe_range
+	c := time.After(rand_timeout)
 	<-c
 
 	t := time.Now()
@@ -138,12 +147,17 @@ func StartTokSiteProbeTimer() {
 	if elapsed > tok_site_probe_timeout {
 		// Tok site might not be alive! Broadcast a Heartbeat now!
 		BroadcastHeartbeat()
-		log.Printf("SEND HEARTBEAT NOW")
+		log.Println("SEND HEARTBEAT NOW")
+		log.Printf("NOT REPLIED TO %d", hbs_not_replied_to)
 		hbs_not_replied_to += 1
 
 		if hbs_not_replied_to > HB_UNREPLIED_ALLOWED {
 			InitTLVChange(token_site)
 		}
+	}
+
+	if !TokenTransferring && !TLVChanging {
+		go StartTokSiteProbeTimer()
 	}
 
 	return
@@ -219,6 +233,7 @@ func PrepareForTlv(initiator int64) {
 	TLVChange.Lock()
 	TLVChanging = true
 	TLVInitiator = initiator
+	hbs_not_replied_to = 0
 }
 
 // Terminate the TLV change routine, this will put this node in a state to
@@ -392,8 +407,7 @@ func TransmitMsgReq(msg_req MsgRequest) MsgRequest {
 	log.Printf("Inside transmit msg req")
 
 	if RetriesPerMsg[rep] >= RVal {
-		log.Print("DETECT TOKEN SITE %d FAIL", token_site)
-		log.Print(RetriesPerMsg)
+		log.Printf("DETECT TOKEN SITE %d FAIL", token_site)
 		delete(RetriesPerMsg, rep)
 		InitTLVChange(token_site)
 	} else {

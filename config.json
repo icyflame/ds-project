@@ -13,10 +13,11 @@
     "InitTokSite": 1,
     "LVal": 2,
     "RVal": 3,
-    "TTI": 2,
-    "ReTTI": 1,
+    "TTI": 10,
+    "ReTTI": 5,
     "CleanUp": 30,
     "TokSiteProbe": 10,
+    "TokSiteRange": 10,
     "TokSiteElapsed": 2,
     "Network": 3,
     "TLV": 20
