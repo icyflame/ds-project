@@ -286,15 +286,16 @@ func FixForChangedTLV(m TLVChangeComplete) {
 	tlv = m.Tlv
 	my_node_num = m.Mapping[my_node_num]
 
-	token_site = m.TokenSite
+	token_site = m.Mapping[m.TokenSite]
 	next_token_site = m.TokenSite
 
+	log.Printf("I am Node %d NOW", my_node_num)
 	if AmTokenSite() {
 		BecomeTokenSite()
+		log.Println("I am the token site!")
 	}
 
 	log.Println("OK TLV CHANGE")
-	log.Printf("I am Node %d NOW", my_node_num)
 }
 
 // When a site receives a "TLV Change" message from an initiator, it will accept
@@ -358,14 +359,8 @@ func InitTokenTransferTimeout(d time.Duration, retry_count int) {
 	// to change
 	AcceptMessage(MsgClient{})
 
-	c = time.After(wait_time_for_re_tti)
-	<-c
-
-	if AmTokenSite() &&
-		!TokenTransferring {
-		log.Printf("RETRY TTI %d -> %d AFTER %v", my_node_num, next_token_site, d)
-		InitTokenTransferTimeout(d, retry_count+1)
-	}
+	log.Printf("RETRY TTI %d -> %d AFTER %v", my_node_num, next_token_site, wait_time_for_re_tti)
+	InitTokenTransferTimeout(wait_time_for_re_tti, retry_count+1)
 }
 
 // Getter function for token_site variable
