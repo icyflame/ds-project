@@ -95,7 +95,7 @@ func HealthReqHandler(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Fprint(w, "\n\nDROP REQUESTS: \n")
 	for k, v := range GetDropReqs() {
-		fmt.Fprintf(w, "\n\t%s\t=%d", k, v)
+		fmt.Fprintf(w, "\n\t%s\t= %d", k, v)
 	}
 }
 

@@ -18,7 +18,7 @@ var routes = Routes{
 	Route{
 		"/sm",
 		AcceptClientMessage,
-		"AcceptClientMsg",
+		"client",
 		"POST",
 		false,
 	},
