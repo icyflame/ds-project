@@ -1,0 +1,24 @@
+{
+    "Peers": {
+        "0": {
+            "IP": "http://localhost:8080"
+        },
+        "1": {
+            "IP": "http://localhost:8081"
+        },
+        "2": {
+            "IP": "http://localhost:8082"
+        }
+    },
+    "InitTokSite": 1,
+    "LVal": 2,
+    "RVal": 3,
+    "TTI": 120,
+    "ReTTI": 10,
+    "CleanUp": 30,
+    "TokSiteProbe": 20,
+    "TokSiteRange": 20,
+    "TokSiteElapsed": 20,
+    "Network": 3,
+    "TLV": 10
+}
